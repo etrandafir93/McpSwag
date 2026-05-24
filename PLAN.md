@@ -187,7 +187,7 @@ Minimal implementation for Phase 2:
 - Use Jackson `ObjectMapper` to serialize a `Map` built from the schema's type, properties, required fields
 - Handle: `string`, `integer`, `number`, `boolean`, `object`, `array`
 - Resolve `$ref` against the `openApi.getComponents.getSchemas` map (pass `OpenAPI` object into the converter method)
-- For Phase 2, inline one level of `$ref` resolution. Deeper nesting can be addressed in Phase 5.
+- For Phase 2, inline one level of `$ref` resolution. Deeper nesting can be addressed in Phase 6.
 
 #### `src/main/scala/com/etrandafir/mcpswag/spec/SpecRegistry.scala`
 
@@ -350,7 +350,108 @@ Remove `HelloWorldTool` once this phase is done and verified.
 
 ---
 
-## Phase 4 — Web UI & management API
+## Phase 4 — Execute HTTP requests
+
+**Goal:** the tool actually performs the HTTP call against the target API and returns the response body to the agent. The `RequestDescriptor` is still emitted alongside the response so the curl/url/headers remain auditable.
+
+### Why this changes Phase 3's design
+
+Phase 3 returns only a `RequestDescriptor`. That keeps McpSwag stateless but assumes the agent has its own HTTP capability — which many MCP clients (e.g. Claude Desktop, the Anthropic API "managed agents") do not. Executing server-side makes the tools immediately useful to any MCP client.
+
+### Decisions
+
+| Concern | Decision |
+|---|---|
+| HTTP client | `java.net.http.HttpClient` (JDK built-in, no extra deps). Reuse a single `HttpClient` bean. |
+| Timeout | 30 s connect + read, configurable via `swagger-mcp.http.timeout-seconds`. |
+| Response shape | A `ToolResponse` JSON: `{status, headers, body, request: RequestDescriptor}`. Body is returned as a string. If response `Content-Type: application/json`, body is embedded as a JSON node, not stringified. |
+| Status codes | 2xx → return normally. Non-2xx → still return the `ToolResponse` (don't throw) — the agent should see the error body. |
+| Destructive ops | Refuse to execute by default. Require `"confirm": true` in the tool args to actually fire DELETE/PUT/PATCH. The tool description already warns; this is the second gate. |
+| Redirects | Follow up to 5 (`HttpClient.Redirect.NORMAL`). |
+| Body size cap | Truncate response body at 256 KB and add `"truncated": true` field. |
+| Auth | Still none in this iteration. Phase 8 (future) handles header forwarding. |
+
+### Files
+
+#### `src/main/scala/com/etrandafir/mcpswag/mcp/HttpExecutor.scala`
+
+`@Component`. Wraps `HttpClient`. Method:
+
+```scala
+def execute(descriptor: RequestDescriptor): ToolResponse
+```
+
+- Build `HttpRequest.Builder` from descriptor (method, url, headers, body)
+- `.timeout(Duration.ofSeconds(timeoutSeconds))`
+- Send `BodyHandlers.ofString(UTF_8)`
+- Wrap result in `ToolResponse`
+- Catch `IOException`/`InterruptedException` → return `ToolResponse` with synthetic status `0` and `error` field
+
+#### `src/main/scala/com/etrandafir/mcpswag/mcp/ToolResponse.scala`
+
+```scala
+case class ToolResponse(
+  status: Int,
+  headers: Map[String, String],
+  body: String,
+  truncated: Boolean,
+  error: Option[String],
+  request: RequestDescriptor
+)
+```
+
+#### `src/main/scala/com/etrandafir/mcpswag/config/McpSwagProperties.scala` — extend
+
+Add nested `http` config:
+
+```scala
+case class HttpConfig(timeoutSeconds: Int = 30, maxBodyBytes: Int = 256 * 1024)
+```
+
+Bind via `swagger-mcp.http.*`.
+
+#### `OperationTool.call` — change
+
+```scala
+override def call(toolInput: String): String =
+  val args = parseArgs(toolInput)
+  val descriptor = buildDescriptor(args)
+  if op.isDestructive && !args.get("confirm").contains(true) then
+    mapper.writeValueAsString(ToolResponse(
+      status = 0,
+      headers = Map.empty,
+      body = "",
+      truncated = false,
+      error = Some("DESTRUCTIVE operation refused. Pass `confirm: true` to execute."),
+      request = descriptor
+    ))
+  else
+    val response = httpExecutor.execute(descriptor)
+    mapper.writeValueAsString(response)
+```
+
+`OperationTool` now takes `httpExecutor: HttpExecutor` as a constructor param. `DynamicToolRegistry` passes it through.
+
+#### `buildInputSchema` — add `confirm` field for destructive ops
+
+For destructive operations, append a top-level property:
+```json
+"confirm": { "type": "boolean", "description": "Required to execute this destructive operation. Pass true to proceed." }
+```
+Add `"confirm"` to `required`.
+
+### Verification
+
+- [ ] `petstore__getPetById` with `{"petId": 1}` actually fetches `https://petstore3.swagger.io/api/v3/pet/1` and returns the JSON body in `ToolResponse.body`
+- [ ] A bad ID (`{"petId": 999999}`) returns `status: 404` with the petstore's error body, not an exception
+- [ ] `petstore__deletePet` without `confirm: true` → returns `error: "DESTRUCTIVE operation refused..."`, no HTTP call made
+- [ ] `petstore__deletePet` with `{"petId": 1, "confirm": true}` → actually issues DELETE
+- [ ] Network timeout → `status: 0, error: "Request timed out after 30s"`
+- [ ] Response body > 256 KB → `truncated: true`
+
+---
+
+## Phase 5 — Web UI & management API
 
 **Goal:** a working browser UI to add/remove/reload specs, and a REST API backing it.
 
@@ -414,9 +515,9 @@ No external JS frameworks. Vanilla JS only. Thymeleaf only used for the initial 
 
 ---
 
-## Phase 5 — Edge cases & hardening
+## Phase 6 — Edge cases & hardening
 
-Work through these after Phase 4 is fully functional.
+Work through these after Phase 5 is fully functional.
 
 ### operationId synthesis
 
@@ -471,7 +572,7 @@ If both `summary` and `description` are null/empty on an operation, fall back to
 
 ---
 
-## Phase 6 — Docker & CI publishing
+## Phase 7 — Docker & CI publishing
 
 **Goal:** ship McpSwag as a runnable container image. `docker run <registry>/mcpswag` should start the MCP server on port 8080 with no extra setup. Image is built and pushed by GitHub Actions on every push to `main` and on tagged releases.
 
@@ -616,7 +717,7 @@ jobs:
 
 ---
 
-## Phase 7 — Future (not in scope now)
+## Phase 8 — Future (not in scope now)
 
 These are documented here for awareness. Do not implement in the current iteration.
 
