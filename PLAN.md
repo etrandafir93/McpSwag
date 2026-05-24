@@ -471,7 +471,152 @@ If both `summary` and `description` are null/empty on an operation, fall back to
 
 ---
 
-## Phase 6 — Future (not in scope now)
+## Phase 6 — Docker & CI publishing
+
+**Goal:** ship McpSwag as a runnable container image. `docker run <registry>/mcpswag` should start the MCP server on port 8080 with no extra setup. Image is built and pushed by GitHub Actions on every push to `main` and on tagged releases.
+
+### Decisions
+
+| Concern | Decision |
+|---|---|
+| Registry | Docker Hub: `docker.io/<dockerhub-user>/mcpswag` (fill in actual username before first push) |
+| Base image | `eclipse-temurin:21-jre-jammy` for runtime, `eclipse-temurin:21-jdk-jammy` for the build stage |
+| Build inside Docker | Multi-stage: stage 1 runs `sbt assembly` (or `sbt stage`), stage 2 copies the artifact into the JRE image |
+| Packaging | Use `sbt-native-packager`'s `JavaAppPackaging` → `sbt stage` produces `target/universal/stage/{bin,lib}`. Avoid fat-jar/assembly to keep layer caching effective. |
+| Config override | `application.yml` baked in with empty `swagger-mcp.sources`. Users override via env vars (`SPRING_APPLICATION_JSON`) or by mounting a config file at `/app/config/application.yml` (Spring picks it up via `--spring.config.additional-location`) |
+| Exposed port | `8080` |
+| Image tags | `latest` + short SHA on `main`; semver tag (e.g. `0.1.0`) on `v*` git tags |
+| Multi-arch | `linux/amd64` + `linux/arm64` via `docker/build-push-action` + QEMU |
+| Secrets | `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` stored as GitHub Actions repo secrets |
+
+### Files to create
+
+#### `project/plugins.sbt` (add)
+
+```scala
+addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.10.4")
+```
+
+#### `build.sbt` (enable plugin)
+
+```scala
+.enablePlugins(JavaAppPackaging)
+```
+
+Set `Compile / mainClass := Some("com.etrandafir.mcpswag.McpSwagApp")` (already present) and `executableScriptName := "mcpswag"`.
+
+#### `Dockerfile`
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+
+FROM eclipse-temurin:21-jdk-jammy AS build
+WORKDIR /src
+
+# Install sbt
+RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg ca-certificates && \
+    echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" > /etc/apt/sources.list.d/sbt.list && \
+    curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" | apt-key add - && \
+    apt-get update && apt-get install -y --no-install-recommends sbt && \
+    rm -rf /var/lib/apt/lists/*
+
+# Warm sbt + dependency cache first for better layer reuse
+COPY project/ project/
+COPY build.sbt ./
+RUN sbt update
+
+COPY src/ src/
+RUN sbt stage
+
+FROM eclipse-temurin:21-jre-jammy AS runtime
+WORKDIR /app
+COPY --from=build /src/target/universal/stage/ /app/
+EXPOSE 8080
+ENV JAVA_OPTS=""
+ENTRYPOINT ["/app/bin/mcpswag"]
+```
+
+#### `.dockerignore`
+
+```
+target/
+project/target/
+project/project/
+.git/
+.idea/
+.bsp/
+*.iml
+```
+
+#### `.github/workflows/docker.yml`
+
+```yaml
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/mcpswag
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+```
+
+### Verification
+
+- [ ] `docker build -t mcpswag:dev .` succeeds locally
+- [ ] `docker run --rm -p 8080:8080 mcpswag:dev` starts the app; `curl http://localhost:8080/mcp` responds
+- [ ] Mounting a custom config works: `docker run --rm -p 8080:8080 -v $PWD/my-config.yml:/app/config/application.yml -e SPRING_CONFIG_ADDITIONAL_LOCATION=/app/config/application.yml mcpswag:dev` loads the user's specs
+- [ ] GitHub Actions: push to `main` → image appears in Docker Hub tagged `latest` and `sha-<short>`
+- [ ] Tagging `v0.1.0` → image appears tagged `0.1.0`
+- [ ] `docker manifest inspect` shows both `amd64` and `arm64` variants
+
+### Follow-ups (not blocking)
+
+- Consider switching from Docker Hub to GHCR (`ghcr.io/etrandafir/mcpswag`) if the user prefers — GHCR auth uses the built-in `GITHUB_TOKEN`, no separate secrets needed.
+- Add a `compose.yaml` for local dev with a mounted spec directory.
+- SBOM / provenance attestation via `docker/build-push-action`'s `sbom: true` / `provenance: true` once the image is stable.
+
+---
+
+## Phase 7 — Future (not in scope now)
 
 These are documented here for awareness. Do not implement in the current iteration.
 
