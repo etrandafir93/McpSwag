@@ -10,9 +10,9 @@ import org.springframework.context.annotation.Bean
 class McpSwagApp:
 
   @Bean
-  def helloWorldToolProvider(helloWorldTool: HelloWorldTool): ToolCallbackProvider =
+  def staticToolProvider(listSpecsTool: ListSpecsTool): ToolCallbackProvider =
     MethodToolCallbackProvider.builder()
-      .toolObjects(helloWorldTool)
+      .toolObjects(listSpecsTool)
       .build()
 
 object McpSwagApp:
