@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: mcpswag
+  ai:
+    mcp:
+      server:
+        name: mcpswag
+        version: 0.1.0
+        protocol: STREAMABLE
+        type: SYNC
+        instructions: "McpSwag — OpenAPI → MCP gateway. Phase 0: only the hello tool is exposed."
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.etrandafir.mcpswag: DEBUG
