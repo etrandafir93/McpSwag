@@ -17,7 +17,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "org.springframework.boot" %  "spring-boot-starter-web"                  % springBootVersion,
       "org.springframework.ai"   %  "spring-ai-starter-mcp-server-webmvc"      % springAiVersion,
-      "com.fasterxml.jackson.module" %% "jackson-module-scala"                 % "2.18.3",
+      "com.fasterxml.jackson.module" %% "jackson-module-scala"                 % "2.21.2",
       "io.swagger.parser.v3"     %  "swagger-parser"                           % "2.1.25",
 
       "org.springframework.boot" %  "spring-boot-starter-test"                 % springBootVersion % Test,
