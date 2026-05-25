@@ -6,9 +6,11 @@ lazy val springBootVersion = "3.4.5"
 lazy val springAiVersion   = "1.1.5"
 
 lazy val root = (project in file("."))
+  .enablePlugins(JavaAppPackaging)
   .settings(
     name := "mcpswag",
     Compile / mainClass := Some("com.etrandafir.mcpswag.McpSwagApp"),
+    executableScriptName := "mcpswag",
     run / fork := true,
     javacOptions ++= Seq("--release", "21"),
 

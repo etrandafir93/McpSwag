@@ -641,7 +641,7 @@ OpenAPI `integer` / `format: int64` params advertised as JSON numbers lose preci
 
 | Concern | Decision |
 |---|---|
-| Registry | Docker Hub: `docker.io/<dockerhub-user>/mcpswag` (fill in actual username before first push) |
+| Registry | GitHub Container Registry: `ghcr.io/${{ github.repository_owner }}/mcpswag`. Uses the built-in `GITHUB_TOKEN` (no extra secrets). |
 | Base image | `eclipse-temurin:21-jre-jammy` for runtime, `eclipse-temurin:21-jdk-jammy` for the build stage |
 | Build inside Docker | Multi-stage: stage 1 runs `sbt assembly` (or `sbt stage`), stage 2 copies the artifact into the JRE image |
 | Packaging | Use `sbt-native-packager`'s `JavaAppPackaging` → `sbt stage` produces `target/universal/stage/{bin,lib}`. Avoid fat-jar/assembly to keep layer caching effective. |
@@ -649,7 +649,7 @@ OpenAPI `integer` / `format: int64` params advertised as JSON numbers lose preci
 | Exposed port | `8080` |
 | Image tags | `latest` + short SHA on `main`; semver tag (e.g. `0.1.0`) on `v*` git tags |
 | Multi-arch | `linux/amd64` + `linux/arm64` via `docker/build-push-action` + QEMU |
-| Secrets | `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` stored as GitHub Actions repo secrets |
+| Secrets | None. `GITHUB_TOKEN` (auto-provided) authenticates against GHCR via `packages: write` permission on the job. |
 
 ### Files to create
 
@@ -763,12 +763,12 @@ jobs:
 
 ### Verification
 
-- [ ] `docker build -t mcpswag:dev .` succeeds locally
-- [ ] `docker run --rm -p 8080:8080 mcpswag:dev` starts the app; `curl http://localhost:8080/mcp` responds
-- [ ] Mounting a custom config works: `docker run --rm -p 8080:8080 -v $PWD/my-config.yml:/app/config/application.yml -e SPRING_CONFIG_ADDITIONAL_LOCATION=/app/config/application.yml mcpswag:dev` loads the user's specs
-- [ ] GitHub Actions: push to `main` → image appears in Docker Hub tagged `latest` and `sha-<short>`
+- [x] `docker build -t mcpswag:dev .` succeeds locally (multi-stage temurin-jdk → temurin-jre)
+- [x] `docker run --rm -p 8080:8080 mcpswag:dev` starts the app; container bootstraps the bundled petstore spec and registers 19 MCP tools on Tomcat
+- [ ] Mounting a custom config works: `docker run --rm -p 8080:8080 -v $PWD/my-config.yml:/app/config/application.yml -e SPRING_CONFIG_ADDITIONAL_LOCATION=/app/config/application.yml mcpswag:dev` loads the user's specs (not exercised yet)
+- [ ] GitHub Actions: push to `main` → image appears in GHCR tagged `main`, `sha-<short>`, and `latest`
 - [ ] Tagging `v0.1.0` → image appears tagged `0.1.0`
-- [ ] `docker manifest inspect` shows both `amd64` and `arm64` variants
+- [ ] `docker manifest inspect ghcr.io/<owner>/mcpswag:latest` shows both `amd64` and `arm64` variants
 
 ### Follow-ups (not blocking)
 

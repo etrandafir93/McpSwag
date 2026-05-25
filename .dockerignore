@@ -1,0 +1,10 @@
+target/
+project/target/
+project/project/
+.git/
+.github/
+.idea/
+.bsp/
+.metals/
+.vscode/
+*.iml
