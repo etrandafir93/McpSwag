@@ -10,7 +10,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import scala.jdk.CollectionConverters.*
 
-class OperationTool(op: OperationDef, mapper: ObjectMapper) extends ToolCallback:
+class OperationTool(op: OperationDef, mapper: ObjectMapper, executor: HttpExecutor) extends ToolCallback:
 
   private val definition: ToolDefinition =
     DefaultToolDefinition.builder()
@@ -32,7 +32,26 @@ class OperationTool(op: OperationDef, mapper: ObjectMapper) extends ToolCallback
             .toMap
         else Map.empty
     val descriptor = buildDescriptor(args)
-    mapper.writeValueAsString(descriptor)
+    val response =
+      if op.isDestructive && !confirmed(args) then
+        ToolResponse(
+          status = 0,
+          headers = Map.empty,
+          body = "",
+          truncated = false,
+          error = Some("DESTRUCTIVE operation refused. Pass `confirm: true` in the tool arguments to execute."),
+          request = descriptor
+        )
+      else
+        executor.execute(descriptor)
+    mapper.writeValueAsString(response)
+
+  private def confirmed(args: Map[String, Any]): Boolean =
+    args.get("confirm").exists {
+      case b: java.lang.Boolean => b.booleanValue
+      case b: Boolean           => b
+      case _                    => false
+    }
 
   private def nodeToScala(n: com.fasterxml.jackson.databind.JsonNode): Any =
     if n == null || n.isNull then null
@@ -56,6 +75,13 @@ class OperationTool(op: OperationDef, mapper: ObjectMapper) extends ToolCallback
       props.put("body", bodyNode)
       required.add("body")
     }
+
+    if op.isDestructive then
+      val confirmSchema = new java.util.LinkedHashMap[String, Any]()
+      confirmSchema.put("type", "boolean")
+      confirmSchema.put("description", "Required to execute this destructive operation. Pass true to proceed.")
+      props.put("confirm", confirmSchema)
+      required.add("confirm")
 
     val root = new java.util.LinkedHashMap[String, Any]()
     root.put("type", "object")

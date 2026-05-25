@@ -350,7 +350,7 @@ Remove `HelloWorldTool` once this phase is done and verified.
 
 ---
 
-## Phase 4 — Execute HTTP requests
+## Phase 4 — Execute HTTP requests ✅ (done)
 
 **Goal:** the tool actually performs the HTTP call against the target API and returns the response body to the agent. The `RequestDescriptor` is still emitted alongside the response so the curl/url/headers remain auditable.
 
@@ -442,12 +442,14 @@ Add `"confirm"` to `required`.
 
 ### Verification
 
-- [ ] `petstore__getPetById` with `{"petId": 1}` actually fetches `https://petstore3.swagger.io/api/v3/pet/1` and returns the JSON body in `ToolResponse.body`
-- [ ] A bad ID (`{"petId": 999999}`) returns `status: 404` with the petstore's error body, not an exception
-- [ ] `petstore__deletePet` without `confirm: true` → returns `error: "DESTRUCTIVE operation refused..."`, no HTTP call made
-- [ ] `petstore__deletePet` with `{"petId": 1, "confirm": true}` → actually issues DELETE
-- [ ] Network timeout → `status: 0, error: "Request timed out after 30s"`
-- [ ] Response body > 256 KB → `truncated: true`
+- [x] `petstore__getPetById` with `{"petId": 1}` actually fetches the upstream and returns the JSON body in `ToolResponse.body`
+- [x] A bad ID (`{"petId": 999999}`) returns `status: 404` with the petstore's error body, not an exception
+- [x] `petstore__deletePet` without `confirm: true` → returns `error: "DESTRUCTIVE operation refused..."`, no HTTP call made
+- [x] `petstore__deletePet` with `{"petId": 1, "confirm": true}` → actually issues DELETE
+- [x] Network timeout → `status: 0, error: "..."`
+- [x] Response body > 256 KB → `truncated: true`
+
+Covered by `HttpExecutionTest` (WireMock-backed).
 
 ---
 

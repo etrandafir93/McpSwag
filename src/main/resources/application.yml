@@ -14,6 +14,9 @@ server:
   port: 8080
 
 swagger-mcp:
+  http:
+    timeout-seconds: 30
+    max-body-bytes: 262144
   sources:
     - name: petstore
       file: classpath:openapi/petstore.yml

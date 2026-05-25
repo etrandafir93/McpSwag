@@ -21,6 +21,7 @@ lazy val root = (project in file("."))
       "io.swagger.parser.v3"     %  "swagger-parser"                           % "2.1.25",
 
       "org.springframework.boot" %  "spring-boot-starter-test"                 % springBootVersion % Test,
-      "org.scalatest"            %% "scalatest"                                % "3.2.19"          % Test
+      "org.scalatest"            %% "scalatest"                                % "3.2.19"          % Test,
+      "org.wiremock"             %  "wiremock"                                 % "3.10.0"          % Test
     )
   )

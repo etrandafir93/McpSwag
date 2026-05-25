@@ -5,10 +5,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import java.util as ju
 
 @ConfigurationProperties("swagger-mcp")
-case class McpSwagProperties(sources: ju.List[SourceConfig] = ju.List.of())
+case class McpSwagProperties(
+  sources: ju.List[SourceConfig] = ju.List.of(),
+  http:    HttpConfig            = HttpConfig()
+)
 
 case class SourceConfig(
   name: String,
   url:  String = null,
   file: String = null
+)
+
+case class HttpConfig(
+  timeoutSeconds: Int = 30,
+  maxBodyBytes:   Int = 256 * 1024
 )

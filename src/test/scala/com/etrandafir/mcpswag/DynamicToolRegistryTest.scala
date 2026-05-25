@@ -62,18 +62,20 @@ class DynamicToolRegistryTest extends AnyFunSuite with Matchers with BeforeAndAf
       .getOrElse(fail("petstore__getPetById not registered"))
     tool.getToolDefinition.description should not startWith "⚠️"
 
-  test("calling petstore__getPetById returns a RequestDescriptor with the substituted path"):
+  test("destructive op without confirm refuses execution and embeds the descriptor"):
     val tool = toolRegistry.getToolCallbacks
-      .find(_.getToolDefinition.name == "petstore__getPetById")
-      .getOrElse(fail("petstore__getPetById not registered"))
-    
+      .find(_.getToolDefinition.name == "petstore__deletePet")
+      .getOrElse(fail("petstore__deletePet not registered"))
+
     val response = tool.call("""{"petId": 42}""")
-    
     val node = mapper.readTree(response)
-    node.get("method").asText shouldBe "GET"
-    node.get("url").asText should endWith ("/pet/42")
-    node.get("curl").asText should include ("'") // url is single-quoted in curl
-    node.get("curl").asText should startWith ("curl -X GET")
+
+    node.get("status").asInt shouldBe 0
+    node.get("error").asText should include ("DESTRUCTIVE")
+    val request = node.get("request")
+    request.get("method").asText shouldBe "DELETE"
+    request.get("url").asText should endWith ("/pet/42")
+    request.get("curl").asText should startWith ("curl -X DELETE")
 
   test("removing a spec clears all its tools"):
     val original = specRegistry.entries("petstore").source

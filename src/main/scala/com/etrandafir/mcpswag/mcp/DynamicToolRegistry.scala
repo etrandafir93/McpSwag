@@ -13,7 +13,8 @@ import scala.jdk.CollectionConverters.*
 class DynamicToolRegistry(
   mapper: ObjectMapper,
   specRegistry: SpecRegistry,
-  configuredSources: java.util.List[SpecSource]
+  configuredSources: java.util.List[SpecSource],
+  executor: HttpExecutor
 ) extends ToolCallbackProvider:
 
   private val logger = LoggerFactory.getLogger(classOf[DynamicToolRegistry])
@@ -52,7 +53,7 @@ class DynamicToolRegistry(
     val duplicates = names.diff(names.distinct).distinct
     if duplicates.nonEmpty then
       logger.warn(s"[McpSwag] Duplicate tool names detected: ${duplicates.mkString(", ")}")
-    currentTools = operations.map(op => new OperationTool(op, mapper)).toArray
+    currentTools = operations.map(op => new OperationTool(op, mapper, executor)).toArray
     logger.info(s"[McpSwag] DynamicToolRegistry rebuilt with ${currentTools.length} tool(s)")
 
   override def getToolCallbacks: Array[ToolCallback] = currentTools
