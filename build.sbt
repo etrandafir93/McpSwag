@@ -16,6 +16,12 @@ lazy val root = (project in file("."))
 
     Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-reports"),
 
+    // ExternalConfigEnvVarTest sets the MCPSWAG_CONFIG system property to verify
+    // the env-var indirection. JVM-wide state leaks across concurrent test classes,
+    // so tests are sequenced.
+    Test / parallelExecution := false,
+
+
 
     resolvers += "Spring Milestones" at "https://repo.spring.io/milestone",
 

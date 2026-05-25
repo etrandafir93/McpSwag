@@ -1,6 +1,11 @@
 spring:
   application:
     name: mcpswag
+  config:
+    # Optional external config file. If MCPSWAG_CONFIG is set, that YAML file
+    # is layered on top of these defaults (overriding swagger-mcp.sources etc).
+    # If unset, the import is a no-op.
+    import: "optional:file:${MCPSWAG_CONFIG:}"
   ai:
     mcp:
       server:

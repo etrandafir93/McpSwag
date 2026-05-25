@@ -40,14 +40,28 @@ docker pull ghcr.io/etrandafir93/mcpswag:latest
 docker run --rm -p 8080:8080 ghcr.io/etrandafir93/mcpswag:latest
 ```
 
-The image ships with a bundled Swagger Petstore spec so you can see ~19 MCP tools on first run. To load your own specs, mount a config file:
+The image ships with a bundled Swagger Petstore spec so you can see ~19 MCP tools on first run. To load your own specs, write a YAML file with a `swagger-mcp.sources` array and point the `MCPSWAG_CONFIG` env var at it — the file is layered on top of the bundled defaults (and, if it sets `swagger-mcp.sources`, replaces them):
+
+```yaml
+# my-mcpswag.yml
+swagger-mcp:
+  sources:
+    - name: petstore
+      url: https://petstore3.swagger.io/api/v3/openapi.json
+    - name: orders
+      file: /etc/specs/orders.yml
+    - name: inventory
+      file: classpath:openapi/inventory.yml
+```
 
 ```bash
 docker run --rm -p 8080:8080 \
-  -v $PWD/my-app.yml:/app/config/application.yml \
-  -e SPRING_CONFIG_ADDITIONAL_LOCATION=/app/config/application.yml \
+  -v $PWD/my-mcpswag.yml:/etc/mcpswag/config.yml \
+  -e MCPSWAG_CONFIG=/etc/mcpswag/config.yml \
   ghcr.io/etrandafir93/mcpswag:latest
 ```
+
+The same env var works locally too: `MCPSWAG_CONFIG=./my-mcpswag.yml sbt run`.
 
 Published images live at <https://github.com/etrandafir93/McpSwag/pkgs/container/mcpswag>.
 

@@ -627,6 +627,12 @@ if duplicates.nonEmpty then
 
 If both `summary` and `description` are null/empty on an operation, fall back to the tool name itself as the description. Never pass an empty string to `ToolDefinition.description` — Spring AI may reject it.
 
+### External config via MCPSWAG_CONFIG env var ✅
+
+`application.yml` declares `spring.config.import: "optional:file:${MCPSWAG_CONFIG:}"`, so setting that env var (or system property) makes Spring layer the named file on top of the bundled defaults at startup. Same mechanism works for `sbt run` and `docker run`. Covered by `ExternalConfigEnvVarTest`, which writes a temp YAML with one `swagger-mcp.sources` entry, sets `MCPSWAG_CONFIG`, and asserts the `SpecRegistry` exposes the external source while the bundled `petstore` is no longer present.
+
+Note: `Test / parallelExecution := false` is set in `build.sbt` because that test mutates a JVM-wide system property and the Spring contexts of other `@SpringBootTest` classes would race against it under parallel execution.
+
 ### URL-sourced specs ✅ (covered by integration test)
 
 `SpecSource.Url` was wired since Phase 2 — `SpecParser.readLocation` resolves http/https URLs via swagger-parser's built-in fetching, and `resolveBaseUrl` falls back to the spec URL's origin when the document has no `servers[]`. The path stayed exercised only by reading the bundled classpath petstore in unit tests, so a regression in URL fetching would have gone unnoticed. `UrlSpecLoadingTest` now serves a 2-operation OpenAPI document from WireMock, loads it via `SpecSource.Url`, stubs the two operation endpoints, and asserts both generated tools (`mini__getHello`, `mini__getStatus`) fire against the right upstream URLs.
