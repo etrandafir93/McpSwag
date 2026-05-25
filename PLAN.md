@@ -647,7 +647,7 @@ OpenAPI `integer` / `format: int64` params advertised as JSON numbers lose preci
 | Packaging | Use `sbt-native-packager`'s `JavaAppPackaging` → `sbt stage` produces `target/universal/stage/{bin,lib}`. Avoid fat-jar/assembly to keep layer caching effective. |
 | Config override | `application.yml` baked in with empty `swagger-mcp.sources`. Users override via env vars (`SPRING_APPLICATION_JSON`) or by mounting a config file at `/app/config/application.yml` (Spring picks it up via `--spring.config.additional-location`) |
 | Exposed port | `8080` |
-| Image tags | `latest` + short SHA on `main`; semver tag (e.g. `0.1.0`) on `v*` git tags |
+| Image tags | `latest` + short SHA. Image builds are slow (multi-arch QEMU), so the workflow is `workflow_dispatch`-only — trigger manually from main when a release is wanted, not on every push. |
 | Multi-arch | `linux/amd64` + `linux/arm64` via `docker/build-push-action` + QEMU |
 | Secrets | None. `GITHUB_TOKEN` (auto-provided) authenticates against GHCR via `packages: write` permission on the job. |
 
@@ -766,8 +766,7 @@ jobs:
 - [x] `docker build -t mcpswag:dev .` succeeds locally (multi-stage temurin-jdk → temurin-jre)
 - [x] `docker run --rm -p 8080:8080 mcpswag:dev` starts the app; container bootstraps the bundled petstore spec and registers 19 MCP tools on Tomcat
 - [ ] Mounting a custom config works: `docker run --rm -p 8080:8080 -v $PWD/my-config.yml:/app/config/application.yml -e SPRING_CONFIG_ADDITIONAL_LOCATION=/app/config/application.yml mcpswag:dev` loads the user's specs (not exercised yet)
-- [ ] GitHub Actions: push to `main` → image appears in GHCR tagged `main`, `sha-<short>`, and `latest`
-- [ ] Tagging `v0.1.0` → image appears tagged `0.1.0`
+- [ ] `gh workflow run docker.yml` (or "Run workflow" from the Actions UI on main) → image appears in GHCR tagged `sha-<short>` and `latest`
 - [ ] `docker manifest inspect ghcr.io/<owner>/mcpswag:latest` shows both `amd64` and `arm64` variants
 
 ### Follow-ups (not blocking)
