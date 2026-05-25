@@ -808,6 +808,14 @@ These are documented here for awareness. Do not implement in the current iterati
 - **No unnecessary abstractions**: don't create traits/type classes unless there are at least 2 concrete implementations needed now
 - **Test**: at minimum, a `SpecParserSpec` that loads the petstore URL and asserts `operations.nonEmpty` and at least one operation has the expected tool name
 
+**FP review pass — 2026-05-25** ✅
+- `SourceConfig.url/file` → `ju.Optional[String]` per convention (no more `null` defaults).
+- Java collections from Spring (`specSources`) converted to Scala `List` once at each consumer's constructor (`DynamicToolRegistry`, `ListSpecsTool`).
+- `SpecParser.parse` returns `Either[String, List[OperationDef]]`; `SpecRegistry.load` consumes it via pattern match (no more `try/catch Throwable` as control flow).
+- `HttpExecutor` uses `Try(...) match` instead of try/catch.
+- `SchemaConverter` builds `ListMap[String, Any]` internally; Java mutable maps removed.
+- `OperationTool`: `nodeToScala` returns `Option[Any]`; `rewriteInt64ToString` is pure (`ListMap => ListMap`); `mutable.ArrayBuffer` in `buildCurl` replaced with immutable concat; `asInstanceOf[ObjectNode]` replaced with pattern match.
+
 ---
 
 ## Verification checklist (end state)

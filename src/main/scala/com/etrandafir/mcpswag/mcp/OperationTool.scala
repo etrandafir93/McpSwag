@@ -1,13 +1,14 @@
 package com.etrandafir.mcpswag.mcp
 
 import com.etrandafir.mcpswag.spec.{HttpMethod, OperationDef, ParamDef, ParamLocation}
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.node.ObjectNode
 import org.springframework.ai.tool.ToolCallback
 import org.springframework.ai.tool.definition.{DefaultToolDefinition, ToolDefinition}
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import scala.collection.immutable.ListMap
 import scala.jdk.CollectionConverters.*
 
 class OperationTool(op: OperationDef, mapper: ObjectMapper, executor: HttpExecutor) extends ToolCallback:
@@ -22,29 +23,32 @@ class OperationTool(op: OperationDef, mapper: ObjectMapper, executor: HttpExecut
   override def getToolDefinition: ToolDefinition = definition
 
   override def call(toolInput: String): String =
-    val args: Map[String, Any] =
-      if toolInput == null || toolInput.isBlank then Map.empty
-      else
-        val node = mapper.readTree(toolInput)
-        if node.isObject then
-          node.asInstanceOf[ObjectNode].properties.asScala
-            .map(e => e.getKey -> nodeToScala(e.getValue))
-            .toMap
-        else Map.empty
+    val args       = parseArgs(toolInput)
     val descriptor = buildDescriptor(args)
     val response =
       if op.isDestructive && !confirmed(args) then
         ToolResponse(
-          status = 0,
-          headers = Map.empty,
-          body = "",
+          status    = 0,
+          headers   = Map.empty,
+          body      = "",
           truncated = false,
-          error = Some("DESTRUCTIVE operation refused. Pass `confirm: true` in the tool arguments to execute."),
-          request = descriptor
+          error     = Some("DESTRUCTIVE operation refused. Pass `confirm: true` in the tool arguments to execute."),
+          request   = descriptor
         )
       else
         executor.execute(descriptor)
     mapper.writeValueAsString(response)
+
+  private def parseArgs(toolInput: String): Map[String, Any] =
+    Option(toolInput).filterNot(_.isBlank) match
+      case None => Map.empty
+      case Some(input) =>
+        mapper.readTree(input) match
+          case obj: ObjectNode =>
+            obj.properties.asScala.iterator.flatMap { e =>
+              nodeToScala(e.getValue).map(e.getKey -> _)
+            }.toMap
+          case _ => Map.empty
 
   private def confirmed(args: Map[String, Any]): Boolean =
     args.get("confirm").exists {
@@ -53,79 +57,79 @@ class OperationTool(op: OperationDef, mapper: ObjectMapper, executor: HttpExecut
       case _                    => false
     }
 
-  private def nodeToScala(n: com.fasterxml.jackson.databind.JsonNode): Any =
-    if n == null || n.isNull then null
-    else if n.isTextual then n.asText
-    else if n.isBoolean then n.asBoolean
-    else if n.isIntegralNumber then n.asLong
-    else if n.isFloatingPointNumber then n.asDouble
-    else n // arrays/objects: keep as JsonNode, serialize back to JSON when needed
+  private def nodeToScala(n: JsonNode): Option[Any] =
+    Option(n).filterNot(_.isNull).map { node =>
+      if node.isTextual then node.asText
+      else if node.isBoolean then node.asBoolean
+      else if node.isIntegralNumber then node.asLong
+      else if node.isFloatingPointNumber then node.asDouble
+      else node // arrays/objects: keep as JsonNode, serialize back when needed
+    }
 
   private def buildInputSchema(): String =
-    val props = new java.util.LinkedHashMap[String, Any]()
-    val required = new java.util.ArrayList[String]()
+    val paramEntries: List[(String, Any)] =
+      op.parameters.map(p => p.name -> paramSchema(p))
 
-    op.parameters.foreach { p =>
-      props.put(p.name, paramSchemaNode(p))
-      if p.required then required.add(p.name)
-    }
+    val bodyEntry: Option[(String, Any)] =
+      op.requestBodySchema.map(json => "body" -> mapper.readTree(json))
 
-    op.requestBodySchema.foreach { bodyJson =>
-      val bodyNode = mapper.readTree(bodyJson)
-      props.put("body", bodyNode)
-      required.add("body")
-    }
+    val confirmEntry: Option[(String, Any)] =
+      Option.when(op.isDestructive) {
+        "confirm" -> ListMap[String, Any](
+          "type"        -> "boolean",
+          "description" -> "Required to execute this destructive operation. Pass true to proceed."
+        )
+      }
 
-    if op.isDestructive then
-      val confirmSchema = new java.util.LinkedHashMap[String, Any]()
-      confirmSchema.put("type", "boolean")
-      confirmSchema.put("description", "Required to execute this destructive operation. Pass true to proceed.")
-      props.put("confirm", confirmSchema)
-      required.add("confirm")
+    val properties: ListMap[String, Any] =
+      ListMap.from(paramEntries ++ bodyEntry ++ confirmEntry)
 
-    val root = new java.util.LinkedHashMap[String, Any]()
-    root.put("type", "object")
-    root.put("properties", props)
-    if !required.isEmpty then root.put("required", required)
+    val required: List[String] =
+      op.parameters.filter(_.required).map(_.name) ++
+        bodyEntry.map(_ => "body") ++
+        confirmEntry.map(_ => "confirm")
+
+    val root: ListMap[String, Any] =
+      ListMap[String, Any]("type" -> "object", "properties" -> properties) ++
+        Option.when(required.nonEmpty)("required" -> required)
+
     mapper.writeValueAsString(root)
 
-  private def paramSchemaNode(p: ParamDef): Any =
-    val base: java.util.Map[String, Any] = p.schema match
-      case Some(json) =>
-        val node = mapper.readTree(json)
-        if node.isObject then
-          val m = new java.util.LinkedHashMap[String, Any]()
-          node.asInstanceOf[ObjectNode].properties.asScala.foreach(e => m.put(e.getKey, e.getValue))
-          m
-        else new java.util.LinkedHashMap[String, Any]()
-      case None =>
-        val m = new java.util.LinkedHashMap[String, Any]()
-        m.put("type", "string")
-        m
-    rewriteInt64ToString(base)
-    p.description.foreach { d =>
-      if !base.containsKey("description") then base.put("description", d)
-    }
-    base
+  private def paramSchema(p: ParamDef): ListMap[String, Any] =
+    val base = p.schema match
+      case Some(json) => jsonToMap(json)
+      case None       => ListMap[String, Any]("type" -> "string")
+    val rewritten = rewriteInt64ToString(base)
+    p.description match
+      case Some(d) if !rewritten.contains("description") => rewritten.updated("description", d)
+      case _                                              => rewritten
 
-  private def rewriteInt64ToString(schema: java.util.Map[String, Any]): Unit =
-    val typeNode = schema.get("type")
-    val formatNode = schema.get("format")
+  private def jsonToMap(json: String): ListMap[String, Any] =
+    mapper.readTree(json) match
+      case obj: ObjectNode =>
+        obj.properties.asScala.foldLeft(ListMap.empty[String, Any]) { (acc, e) =>
+          acc.updated(e.getKey, e.getValue)
+        }
+      case _ => ListMap.empty
+
+  private def rewriteInt64ToString(schema: ListMap[String, Any]): ListMap[String, Any] =
     val isInt64 =
-      stringValue(typeNode).contains("integer") && stringValue(formatNode).contains("int64")
-    if isInt64 then
-      schema.put("type", "string")
-      schema.remove("format")
-      schema.put("pattern", "^-?\\d+$")
-      val note = "int64 as string — JSON number precision loss for values > 2^53."
-      val existing = stringValue(schema.get("description"))
-      schema.put("description", existing.fold(note)(d => s"$d ($note)"))
+      schema.get("type").flatMap(stringValue).contains("integer") &&
+        schema.get("format").flatMap(stringValue).contains("int64")
+    if !isInt64 then schema
+    else
+      val note    = "int64 as string — JSON number precision loss for values > 2^53."
+      val newDesc = schema.get("description").flatMap(stringValue).fold(note)(d => s"$d ($note)")
+      schema
+        .updated("type", "string")
+        .removed("format")
+        .updated("pattern", "^-?\\d+$")
+        .updated("description", newDesc)
 
   private def stringValue(v: Any): Option[String] = v match
-    case null                                       => None
-    case s: String                                  => Some(s)
-    case n: com.fasterxml.jackson.databind.JsonNode => if n.isTextual then Some(n.asText) else None
-    case _                                          => None
+    case s: String                          => Some(s)
+    case n: JsonNode if n.isTextual         => Some(n.asText)
+    case _                                  => None
 
   private def buildDescriptor(args: Map[String, Any]): RequestDescriptor =
     val pathParamDefs   = op.parameters.filter(_.in == ParamLocation.Path)
@@ -133,7 +137,9 @@ class OperationTool(op: OperationDef, mapper: ObjectMapper, executor: HttpExecut
     val headerParamDefs = op.parameters.filter(_.in == ParamLocation.Header)
 
     val substitutedPath = pathParamDefs.foldLeft(op.path) { (acc, p) =>
-      args.get(p.name).map(v => acc.replace(s"{${p.name}}", URLEncoder.encode(stringify(v), StandardCharsets.UTF_8))).getOrElse(acc)
+      args.get(p.name)
+        .map(v => acc.replace(s"{${p.name}}", URLEncoder.encode(stringify(v), StandardCharsets.UTF_8)))
+        .getOrElse(acc)
     }
 
     val queryParams: Map[String, String] = queryParamDefs.flatMap { p =>
@@ -153,35 +159,33 @@ class OperationTool(op: OperationDef, mapper: ObjectMapper, executor: HttpExecut
     val url = op.baseUrl.stripSuffix("/") + substitutedPath + queryString
 
     val body: Option[String] = args.get("body").map {
-      case s: String                            => s
-      case other if other != null               => mapper.writeValueAsString(other)
-      case _                                    => ""
+      case s: String => s
+      case other     => mapper.writeValueAsString(other)
     }
 
-    val curl = buildCurl(op.method, url, headers, body)
-
     RequestDescriptor(
-      method = op.method.toString,
-      url = url,
-      headers = headers,
+      method      = op.method.toString,
+      url         = url,
+      headers     = headers,
       queryParams = queryParams,
-      body = body,
-      curl = curl
+      body        = body,
+      curl        = buildCurl(op.method, url, headers, body)
     )
 
   private def stringify(v: Any): String = v match
-    case null  => ""
     case s: String => s
-    case other => other.toString
+    case other     => other.toString
 
   private def buildCurl(method: HttpMethod, url: String, headers: Map[String, String], body: Option[String]): String =
-    val parts = scala.collection.mutable.ArrayBuffer[String]("curl", "-X", method.toString, s"'$url'")
-    headers.foreach { case (k, v) => parts += "-H"; parts += s"'$k: $v'" }
-    body.foreach { b =>
-      parts += "-H"; parts += "'Content-Type: application/json'"
-      parts += "-d"; parts += s"'${b.replace("'", "'\\''")}'"
-    }
-    parts.mkString(" ")
+    val headerParts: List[String] =
+      headers.toList.flatMap { case (k, v) => List("-H", s"'$k: $v'") }
+
+    val bodyParts: List[String] =
+      body.toList.flatMap { b =>
+        List("-H", "'Content-Type: application/json'", "-d", s"'${b.replace("'", "'\\''")}'")
+      }
+
+    (List("curl", "-X", method.toString, s"'$url'") ++ headerParts ++ bodyParts).mkString(" ")
 
 object OperationTool:
 

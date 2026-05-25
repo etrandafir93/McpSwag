@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.{Bean, Configuration}
 
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 @Configuration
 @EnableConfigurationProperties(Array(classOf[McpSwagProperties]))
@@ -15,7 +16,9 @@ class McpSwagConfig:
     props.sources.asScala.toList.map(toSpecSource).asJava
 
   private def toSpecSource(cfg: SourceConfig): SpecSource =
-    (Option(cfg.url), Option(cfg.file)) match
+    val url  = Option(cfg.url).flatMap(_.toScala)
+    val file = Option(cfg.file).flatMap(_.toScala)
+    (url, file) match
       case (Some(u), None)    => SpecSource.Url(cfg.name, u)
       case (None,    Some(f)) => SpecSource.File(cfg.name, f)
       case (Some(_), Some(_)) =>

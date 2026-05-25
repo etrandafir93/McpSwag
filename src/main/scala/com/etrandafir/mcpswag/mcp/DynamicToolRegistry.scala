@@ -13,23 +13,26 @@ import scala.jdk.CollectionConverters.*
 class DynamicToolRegistry(
   mapper: ObjectMapper,
   specRegistry: SpecRegistry,
-  configuredSources: java.util.List[SpecSource],
+  configuredSourcesJava: java.util.List[SpecSource],
   executor: HttpExecutor
 ) extends ToolCallbackProvider:
 
   private val logger = LoggerFactory.getLogger(classOf[DynamicToolRegistry])
 
+  private val configuredSources: List[SpecSource] = configuredSourcesJava.asScala.toList
+
   @volatile private var currentTools: Array[ToolCallback] = Array.empty
 
   @PostConstruct
   def bootstrap(): Unit =
-    val sources = configuredSources.asScala.toList
-    logger.info(s"[McpSwag] Bootstrapping ${sources.size} configured spec source(s)")
-    sources.foreach { src =>
-      src match
-        case SpecSource.Url(name, url)   => logger.info(s"[McpSwag] Loading spec '$name' from URL: $url")
-        case SpecSource.File(name, path) => logger.info(s"[McpSwag] Loading spec '$name' from FILE: $path")
-      specRegistry.load(src)
+    logger.info(s"[McpSwag] Bootstrapping ${configuredSources.size} configured spec source(s)")
+    configuredSources.foreach {
+      case src @ SpecSource.Url(name, url) =>
+        logger.info(s"[McpSwag] Loading spec '$name' from URL: $url")
+        specRegistry.load(src)
+      case src @ SpecSource.File(name, path) =>
+        logger.info(s"[McpSwag] Loading spec '$name' from FILE: $path")
+        specRegistry.load(src)
     }
     rebuild()
 

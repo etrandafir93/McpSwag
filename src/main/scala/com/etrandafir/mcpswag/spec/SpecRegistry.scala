@@ -25,16 +25,13 @@ class SpecRegistry(parser: SpecParser):
 
   def load(source: SpecSource): SpecEntry =
     val name = source.name
-    registry.put(name, SpecEntry(source, SpecStatus.Loading, Nil))
-    val entry =
-      try
-        val ops = parser.parse(source)
+    val entry = parser.parse(source) match
+      case Right(ops) =>
         logger.info(s"[McpSwag] Loaded spec '$name' — ${ops.size} operations → ${ops.size} MCP tools")
         SpecEntry(source, SpecStatus.Loaded(ops.size), ops)
-      catch
-        case t: Throwable =>
-          logger.error(s"[McpSwag] Failed to load spec '$name': ${t.getMessage}")
-          SpecEntry(source, SpecStatus.Failed(Option(t.getMessage).getOrElse(t.getClass.getSimpleName)), Nil)
+      case Left(msg) =>
+        logger.error(s"[McpSwag] Failed to load spec '$name': $msg")
+        SpecEntry(source, SpecStatus.Failed(msg), Nil)
     registry.put(name, entry)
     entry
 

@@ -7,16 +7,16 @@ import org.springframework.stereotype.Component
 import scala.jdk.CollectionConverters.*
 
 @Component
-class ListSpecsTool(specSources: java.util.List[SpecSource]):
+class ListSpecsTool(specSourcesJava: java.util.List[SpecSource]):
+
+  private val sources: List[SpecSource] = specSourcesJava.asScala.toList
 
   @Tool(description =
     "List all OpenAPI/Swagger specs currently registered with McpSwag. " +
     "Returns each spec's name and the location it was loaded from (file path or URL)."
   )
   def listSpecs(): String =
-    val sources = specSources.asScala.toList
-    if sources.isEmpty then
-      "No specs registered."
+    if sources.isEmpty then "No specs registered."
     else
       val lines = sources.map {
         case SpecSource.Url(name, url)   => s"- $name (url:  $url)"

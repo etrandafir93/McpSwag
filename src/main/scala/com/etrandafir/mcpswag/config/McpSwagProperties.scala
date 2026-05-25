@@ -12,8 +12,8 @@ case class McpSwagProperties(
 
 case class SourceConfig(
   name: String,
-  url:  String = null,
-  file: String = null
+  url:  ju.Optional[String] = ju.Optional.empty(),
+  file: ju.Optional[String] = ju.Optional.empty()
 )
 
 case class HttpConfig(
