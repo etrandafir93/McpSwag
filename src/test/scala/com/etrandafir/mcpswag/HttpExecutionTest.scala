@@ -127,3 +127,46 @@ class HttpExecutionTest extends AnyFunSuite with Matchers with BeforeAndAfterAll
     schema.get("properties").has("confirm") shouldBe true
     val required = (0 until schema.get("required").size).map(schema.get("required").get(_).asText)
     required should contain ("confirm")
+
+  private def getOrderByIdOp = OperationDef(
+    specName = "petstore",
+    toolName = "petstore__getOrderById",
+    method = HttpMethod.GET,
+    path = "/store/order/{orderId}",
+    summary = Some("Find purchase order by ID"),
+    description = None,
+    parameters = List(ParamDef(
+      "orderId",
+      ParamLocation.Path,
+      required = true,
+      schema = Some("""{"type":"integer","format":"int64"}"""),
+      description = None
+    )),
+    requestBodySchema = None,
+    baseUrl = baseUrl,
+    isDestructive = false
+  )
+
+  test("int64 path param is exposed as string in the input schema to avoid JSON number precision loss"):
+    val tool = OperationTool(getOrderByIdOp, mapper, executor)
+    val schema = mapper.readTree(tool.getToolDefinition.inputSchema)
+    val orderId = schema.get("properties").get("orderId")
+    orderId.get("type").asText shouldBe "string"
+    orderId.has("format") shouldBe false
+    orderId.get("pattern").asText shouldBe "^-?\\d+$"
+    orderId.get("description").asText should include ("int64")
+
+  test("int64 path param sent as string preserves all digits in the URL"):
+    wireMock.resetAll()
+    val bigId = "8762099875811304519" // > 2^53, would round to ...4000 as a JS double
+    wireMock.stubFor(WireMock.get(urlPathEqualTo(s"/store/order/$bigId"))
+      .willReturn(aResponse().withStatus(200)
+        .withHeader("Content-Type", "application/json")
+        .withBody(s"""{"id":$bigId,"status":"placed"}""")))
+
+    val tool = OperationTool(getOrderByIdOp, mapper, executor)
+    val node = mapper.readTree(tool.call(s"""{"orderId": "$bigId"}"""))
+
+    node.get("status").asInt shouldBe 200
+    node.get("request").get("url").asText shouldBe s"$baseUrl/store/order/$bigId"
+    wireMock.verify(getRequestedFor(urlPathEqualTo(s"/store/order/$bigId")))

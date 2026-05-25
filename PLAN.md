@@ -572,6 +572,10 @@ if duplicates.nonEmpty then
 
 If both `summary` and `description` are null/empty on an operation, fall back to the tool name itself as the description. Never pass an empty string to `ToolDefinition.description` — Spring AI may reject it.
 
+### int64 JSON-number precision ✅ (done early)
+
+OpenAPI `integer` / `format: int64` params advertised as JSON numbers lose precision over the MCP wire — values above 2^53 are rounded by JS-style double parsers (observed against `getOrderById` with an order ID of `8762099875811304519` → received as `8762099875811304000`). `OperationTool.paramSchemaNode` now rewrites any int64 path/query/header param to `{type: string, pattern: "^-?\\d+$"}` so the model serializes it as a digit-preserving string. URL substitution already goes through `stringify`, so no further changes were needed. Covered by `HttpExecutionTest` ("int64 path param ..." tests). Request body int64 fields are still a known gap.
+
 ---
 
 ## Phase 7 — Docker & CI publishing

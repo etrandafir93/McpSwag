@@ -102,10 +102,30 @@ class OperationTool(op: OperationDef, mapper: ObjectMapper, executor: HttpExecut
         val m = new java.util.LinkedHashMap[String, Any]()
         m.put("type", "string")
         m
+    rewriteInt64ToString(base)
     p.description.foreach { d =>
       if !base.containsKey("description") then base.put("description", d)
     }
     base
+
+  private def rewriteInt64ToString(schema: java.util.Map[String, Any]): Unit =
+    val typeNode = schema.get("type")
+    val formatNode = schema.get("format")
+    val isInt64 =
+      stringValue(typeNode).contains("integer") && stringValue(formatNode).contains("int64")
+    if isInt64 then
+      schema.put("type", "string")
+      schema.remove("format")
+      schema.put("pattern", "^-?\\d+$")
+      val note = "int64 as string — JSON number precision loss for values > 2^53."
+      val existing = stringValue(schema.get("description"))
+      schema.put("description", existing.fold(note)(d => s"$d ($note)"))
+
+  private def stringValue(v: Any): Option[String] = v match
+    case null                                       => None
+    case s: String                                  => Some(s)
+    case n: com.fasterxml.jackson.databind.JsonNode => if n.isTextual then Some(n.asText) else None
+    case _                                          => None
 
   private def buildDescriptor(args: Map[String, Any]): RequestDescriptor =
     val pathParamDefs   = op.parameters.filter(_.in == ParamLocation.Path)
