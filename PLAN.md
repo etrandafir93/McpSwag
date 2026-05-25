@@ -627,6 +627,12 @@ if duplicates.nonEmpty then
 
 If both `summary` and `description` are null/empty on an operation, fall back to the tool name itself as the description. Never pass an empty string to `ToolDefinition.description` — Spring AI may reject it.
 
+### URL-sourced specs ✅ (covered by integration test)
+
+`SpecSource.Url` was wired since Phase 2 — `SpecParser.readLocation` resolves http/https URLs via swagger-parser's built-in fetching, and `resolveBaseUrl` falls back to the spec URL's origin when the document has no `servers[]`. The path stayed exercised only by reading the bundled classpath petstore in unit tests, so a regression in URL fetching would have gone unnoticed. `UrlSpecLoadingTest` now serves a 2-operation OpenAPI document from WireMock, loads it via `SpecSource.Url`, stubs the two operation endpoints, and asserts both generated tools (`mini__getHello`, `mini__getStatus`) fire against the right upstream URLs.
+
+Follow-ups left for later: a configurable timeout on the spec fetch itself (swagger-parser uses its own JDK URL handler) and auth-header forwarding for private spec URLs.
+
 ### int64 JSON-number precision ✅ (done early)
 
 OpenAPI `integer` / `format: int64` params advertised as JSON numbers lose precision over the MCP wire — values above 2^53 are rounded by JS-style double parsers (observed against `getOrderById` with an order ID of `8762099875811304519` → received as `8762099875811304000`). `OperationTool.paramSchemaNode` now rewrites any int64 path/query/header param to `{type: string, pattern: "^-?\\d+$"}` so the model serializes it as a digit-preserving string. URL substitution already goes through `stringify`, so no further changes were needed. Covered by `HttpExecutionTest` ("int64 path param ..." tests). Request body int64 fields are still a known gap.

@@ -88,7 +88,7 @@ Claude Desktop or another MCP client:
 
 ## Configuration
 
-Specs are listed under `swagger-mcp.sources` in `application.yml`. Each source has a `name` and either a `url` or a `file`.
+Specs are listed under `swagger-mcp.sources` in `application.yml`. Each source has a `name` and either a `url` or a `file`. URLs are fetched once at startup; if the document has no `servers[]` block, McpSwag derives the base URL from the spec URL's origin.
 
 ```yaml
 swagger-mcp:
@@ -98,7 +98,12 @@ swagger-mcp:
 
     - name: inventory
       url: https://inventory.internal/v3/api-docs
+
+    - name: github
+      url: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.yaml
 ```
+
+End-to-end coverage of the URL path lives in `UrlSpecLoadingTest` — a WireMock-backed test that serves a small OpenAPI document, loads it via `SpecSource.Url`, and verifies the generated tools actually call the right upstream endpoints.
 
 HTTP-execution settings:
 
