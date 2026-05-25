@@ -187,7 +187,7 @@ Minimal implementation for Phase 2:
 - Use Jackson `ObjectMapper` to serialize a `Map` built from the schema's type, properties, required fields
 - Handle: `string`, `integer`, `number`, `boolean`, `object`, `array`
 - Resolve `$ref` against the `openApi.getComponents.getSchemas` map (pass `OpenAPI` object into the converter method)
-- For Phase 2, inline one level of `$ref` resolution. Deeper nesting can be addressed in Phase 6.
+- For Phase 2, inline one level of `$ref` resolution. Deeper nesting can be addressed in Phase 7.
 
 #### `src/main/scala/com/etrandafir/mcpswag/spec/SpecRegistry.scala`
 
@@ -369,7 +369,7 @@ Phase 3 returns only a `RequestDescriptor`. That keeps McpSwag stateless but ass
 | Destructive ops | Refuse to execute by default. Require `"confirm": true` in the tool args to actually fire DELETE/PUT/PATCH. The tool description already warns; this is the second gate. |
 | Redirects | Follow up to 5 (`HttpClient.Redirect.NORMAL`). |
 | Body size cap | Truncate response body at 256 KB and add `"truncated": true` field. |
-| Auth | Still none in this iteration. Phase 8 (future) handles header forwarding. |
+| Auth | Still none in this iteration. Phase 9 (future) handles header forwarding. |
 
 ### Files
 
@@ -453,7 +453,61 @@ Covered by `HttpExecutionTest` (WireMock-backed).
 
 ---
 
-## Phase 5 — Web UI & management API
+## Phase 5 — CI: run tests on GitHub Actions
+
+**Goal:** every push to `main` and every pull request runs `sbt test` on GitHub Actions. A broken build should block a merge before any human review.
+
+### Decisions
+
+| Concern | Decision |
+|---|---|
+| Runner | `ubuntu-latest` |
+| JDK | Temurin 21 (matches local) via `actions/setup-java@v4` |
+| Build tool | sbt 1.10.7 — installed via `actions/setup-java`'s `cache: sbt` is not sufficient; use `sbt/setup-sbt@v1` |
+| Caching | sbt + ivy + coursier caches keyed on `build.sbt` + `project/**` |
+| Triggers | `push` to `main` and `pull_request` against `main` |
+| Tests | `sbt -batch test` — runs the full suite (`DynamicToolRegistryTest` is `@SpringBootTest`, `HttpExecutionTest` spins up WireMock on a random port) |
+
+### Files to create
+
+#### `.github/workflows/test.yml`
+
+```yaml
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: sbt/setup-sbt@v1
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.sbt
+            ~/.ivy2/cache
+            ~/.cache/coursier
+          key: sbt-${{ hashFiles('build.sbt', 'project/**') }}
+      - run: sbt -batch test
+```
+
+### Verification
+
+- Push this file to `main` → the `tests` workflow runs and reports ✅
+- Open a draft PR with a deliberately broken test → workflow reports ❌
+- Workflow takes under 5 minutes on a cold cache, under 2 with the cache warm
+
+---
+
+## Phase 6 — Web UI & management API
 
 **Goal:** a working browser UI to add/remove/reload specs, and a REST API backing it.
 
@@ -517,9 +571,9 @@ No external JS frameworks. Vanilla JS only. Thymeleaf only used for the initial 
 
 ---
 
-## Phase 6 — Edge cases & hardening
+## Phase 7 — Edge cases & hardening
 
-Work through these after Phase 5 is fully functional.
+Work through these after Phase 6 is fully functional.
 
 ### operationId synthesis
 
@@ -578,7 +632,7 @@ OpenAPI `integer` / `format: int64` params advertised as JSON numbers lose preci
 
 ---
 
-## Phase 7 — Docker & CI publishing
+## Phase 8 — Docker & image publishing
 
 **Goal:** ship McpSwag as a runnable container image. `docker run <registry>/mcpswag` should start the MCP server on port 8080 with no extra setup. Image is built and pushed by GitHub Actions on every push to `main` and on tagged releases.
 
@@ -723,7 +777,7 @@ jobs:
 
 ---
 
-## Phase 8 — Future (not in scope now)
+## Phase 9 — Future (not in scope now)
 
 These are documented here for awareness. Do not implement in the current iteration.
 
