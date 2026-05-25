@@ -64,11 +64,11 @@ class SpecParser(schemaConverter: SchemaConverter):
     method: HttpMethod,
     op: Operation
   ): OperationDef =
-    val operationId = nonEmpty(op.getOperationId).getOrElse(synthesizeOperationId(method, path))
+    val operationId = nonEmpty(op.getOperationId).getOrElse(SpecParser.synthesizeOperationId(method, path))
     val toolName    = s"${specName}__$operationId"
 
     val params = Option(op.getParameters).map(_.asScala.toList).getOrElse(Nil)
-      .flatMap(p => paramLocation(p.getIn).map((p, _)))
+      .flatMap(p => SpecParser.paramLocation(p.getIn).map((p, _)))
       .map { case (p, loc) =>
         ParamDef(
           name        = p.getName,
@@ -114,19 +114,6 @@ class SpecParser(schemaConverter: SchemaConverter):
       HttpMethod.TRACE   -> item.getTrace
     ).flatMap { case (m, op) => Option(op).map(m -> _) }
 
-  private def paramLocation(in: String): Option[ParamLocation] =
-    Option(in).map(_.toLowerCase).collect {
-      case "path"   => ParamLocation.Path
-      case "query"  => ParamLocation.Query
-      case "header" => ParamLocation.Header
-    }
-
-  private def synthesizeOperationId(method: HttpMethod, path: String): String =
-    val segments = path.split("/").filter(_.nonEmpty).map { s =>
-      if s.startsWith("{") && s.endsWith("}") then s.drop(1).dropRight(1) else s
-    }
-    (method.toString.toLowerCase +: segments).mkString("__")
-
   private def resolveBaseUrl(openApi: OpenAPI, source: SpecSource): String =
     Option(openApi.getServers).map(_.asScala.toList).getOrElse(Nil).headOption
       .flatMap(s => Option(s.getUrl))
@@ -145,3 +132,18 @@ class SpecParser(schemaConverter: SchemaConverter):
       "http://localhost:8080"
 
   private def nonEmpty(s: String): Option[String] = Option(s).filter(_.nonEmpty)
+
+object SpecParser:
+
+  def paramLocation(in: String): Option[ParamLocation] =
+    Option(in).map(_.toLowerCase).collect {
+      case "path"   => ParamLocation.Path
+      case "query"  => ParamLocation.Query
+      case "header" => ParamLocation.Header
+    }
+
+  def synthesizeOperationId(method: HttpMethod, path: String): String =
+    val segments = path.split("/").filter(_.nonEmpty).map { s =>
+      if s.startsWith("{") && s.endsWith("}") then s.drop(1).dropRight(1) else s
+    }
+    (method.toString.toLowerCase +: segments).mkString("__")
