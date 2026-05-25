@@ -453,7 +453,7 @@ Covered by `HttpExecutionTest` (WireMock-backed).
 
 ---
 
-## Phase 5 — CI: run tests on GitHub Actions
+## Phase 5 — CI: run tests on GitHub Actions ✅ (done)
 
 **Goal:** every push to `main` and every pull request runs `sbt test` on GitHub Actions. A broken build should block a merge before any human review.
 
@@ -501,9 +501,9 @@ jobs:
 
 ### Verification
 
-- Push this file to `main` → the `tests` workflow runs and reports ✅
-- Open a draft PR with a deliberately broken test → workflow reports ❌
-- Workflow takes under 5 minutes on a cold cache, under 2 with the cache warm
+- [x] Push this file to `main` → the `tests` workflow runs and reports ✅ (run 26415653891 — 56s, cold cache)
+- [ ] Open a draft PR with a deliberately broken test → workflow reports ❌ (not exercised yet)
+- [x] Workflow takes under 5 minutes on a cold cache, under 2 with the cache warm (56s cold)
 
 ---
 
