@@ -12,6 +12,9 @@ lazy val root = (project in file("."))
     run / fork := true,
     javacOptions ++= Seq("--release", "21"),
 
+    Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-reports"),
+
+
     resolvers += "Spring Milestones" at "https://repo.spring.io/milestone",
 
     libraryDependencies ++= Seq(

@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v4
 
@@ -30,3 +33,20 @@ jobs:
             sbt-
 
       - run: sbt -batch test
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: ScalaTest results
+          path: target/test-reports/*.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Upload test report XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: target/test-reports/
+          if-no-files-found: warn

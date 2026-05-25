@@ -467,6 +467,7 @@ Covered by `HttpExecutionTest` (WireMock-backed).
 | Caching | sbt + ivy + coursier caches keyed on `build.sbt` + `project/**` |
 | Triggers | `push` to `main` and `pull_request` against `main` |
 | Tests | `sbt -batch test` — runs the full suite (`DynamicToolRegistryTest` is `@SpringBootTest`, `HttpExecutionTest` spins up WireMock on a random port) |
+| Test reporting | ScalaTest emits JUnit XML via `-u target/test-reports`. `dorny/test-reporter@v1` publishes a check run with per-test results; `actions/upload-artifact@v4` archives the raw XML. |
 
 ### Files to create
 
