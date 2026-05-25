@@ -643,8 +643,9 @@ OpenAPI `integer` / `format: int64` params advertised as JSON numbers lose preci
 |---|---|
 | Registry | GitHub Container Registry: `ghcr.io/${{ github.repository_owner }}/mcpswag`. Uses the built-in `GITHUB_TOKEN` (no extra secrets). |
 | Base image | `eclipse-temurin:21-jre-jammy` for runtime, `eclipse-temurin:21-jdk-jammy` for the build stage |
-| Build inside Docker | Multi-stage: stage 1 runs `sbt assembly` (or `sbt stage`), stage 2 copies the artifact into the JRE image |
-| Packaging | Use `sbt-native-packager`'s `JavaAppPackaging` → `sbt stage` produces `target/universal/stage/{bin,lib}`. Avoid fat-jar/assembly to keep layer caching effective. |
+| Build location | `sbt stage` runs **on the GHA runner**, not inside Docker. Running sbt inside Docker forced a fresh sbt install + dependency resolve + Scala 3 compile on every build (~13 min for multi-arch). Out of Docker, sbt is cached by `actions/cache@v4` and the Docker step is just a COPY (~2s). |
+| Packaging | Use `sbt-native-packager`'s `JavaAppPackaging` → `sbt stage` produces `target/universal/stage/{bin,lib}`. Dockerfile uses `target/universal/stage` as its build context and `COPY . /app/`. |
+| Architecture | `linux/amd64` only. arm64 was dropped — JVM bytecode is arch-neutral, Apple Silicon runs amd64 via Rosetta 2 with negligible JVM overhead, and emulating arm64 with QEMU added ~10 minutes for no real user. |
 | Config override | `application.yml` baked in with empty `swagger-mcp.sources`. Users override via env vars (`SPRING_APPLICATION_JSON`) or by mounting a config file at `/app/config/application.yml` (Spring picks it up via `--spring.config.additional-location`) |
 | Exposed port | `8080` |
 | Image tags | `latest` + short SHA. Image builds are slow (multi-arch QEMU), so the workflow is `workflow_dispatch`-only — trigger manually from main when a release is wanted, not on every push. |
@@ -767,7 +768,6 @@ jobs:
 - [x] `docker run --rm -p 8080:8080 mcpswag:dev` starts the app; container bootstraps the bundled petstore spec and registers 19 MCP tools on Tomcat
 - [ ] Mounting a custom config works: `docker run --rm -p 8080:8080 -v $PWD/my-config.yml:/app/config/application.yml -e SPRING_CONFIG_ADDITIONAL_LOCATION=/app/config/application.yml mcpswag:dev` loads the user's specs (not exercised yet)
 - [ ] `gh workflow run docker.yml` (or "Run workflow" from the Actions UI on main) → image appears in GHCR tagged `sha-<short>` and `latest`
-- [ ] `docker manifest inspect ghcr.io/<owner>/mcpswag:latest` shows both `amd64` and `arm64` variants
 
 ### Follow-ups (not blocking)
 
