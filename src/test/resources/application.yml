@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: mcpswag
+  ai:
+    mcp:
+      server:
+        name: mcpswag
+        version: 0.1.0
+        protocol: STREAMABLE
+        type: SYNC
+
+server:
+  port: 0
+
+swagger-mcp:
+  http:
+    timeout-seconds: 30
+    max-body-bytes: 262144
+  sources:
+    - name: petstore
+      file: classpath:openapi/petstore.yml

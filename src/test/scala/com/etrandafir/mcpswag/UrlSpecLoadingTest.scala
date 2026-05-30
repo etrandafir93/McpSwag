@@ -68,6 +68,28 @@ class UrlSpecLoadingTest extends AnyFunSuite with Matchers with BeforeAndAfterAl
         .withHeader("Content-Type", "application/json")
         .withBody("""{"status":"ok"}""")))
 
+    // Spec with no servers[] block — baseUrl should fall back to the URL's origin.
+    val noServersSpec =
+      """openapi: 3.0.3
+        |info:
+        |  title: No Servers API
+        |  version: 1.0.0
+        |paths:
+        |  /ping:
+        |    get:
+        |      operationId: ping
+        |      summary: Ping endpoint
+        |      responses:
+        |        '200':
+        |          description: ok
+        |""".stripMargin
+
+    wireMock.stubFor(WireMock.get(urlPathEqualTo("/no-servers-spec.yml"))
+      .willReturn(aResponse().withStatus(200)
+        .withHeader("Content-Type", "application/yaml")
+        .withBody(noServersSpec)))
+
+
   override def afterAll(): Unit =
     if wireMock != null then wireMock.stop()
 
@@ -103,3 +125,17 @@ class UrlSpecLoadingTest extends AnyFunSuite with Matchers with BeforeAndAfterAl
 
     wireMock.verify(getRequestedFor(urlPathEqualTo("/hello")))
     wireMock.verify(getRequestedFor(urlPathEqualTo("/status")))
+
+  test("spec with no servers[] falls back to the URL origin as baseUrl"):
+    val source     = SpecSource.Url("noservers", s"$baseUrl/no-servers-spec.yml")
+    val operations = parser.parse(source).getOrElse(fail("parse failed"))
+    operations should have size 1
+    all(operations.map(_.baseUrl)) shouldBe baseUrl
+
+  test("Swagger 2.0 spec is parsed and servers[0].url is derived from host + basePath + schemes"):
+    // swagger-parser converts OAS 2 to OAS 3 internally, merging host+basePath+schemes
+    // into servers[0].url. Classpath source avoids HTTP round-trip issues with OAS 2 conversion.
+    val source     = SpecSource.File("oas2", "classpath:openapi/oas2-test.yml")
+    val operations = parser.parse(source).fold(err => fail(s"parse failed: $err"), identity)
+    operations.map(_.toolName) shouldBe List("oas2__listPets")
+    all(operations.map(_.baseUrl)) shouldBe "https://api.example.com/v1"

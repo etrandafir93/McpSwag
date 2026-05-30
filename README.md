@@ -17,16 +17,16 @@ inventory URL  ──▶           ──▶  petstore__addPet
 
 ## What it does today
 
-- Reads OpenAPI 3.x and Swagger 2.0 specs from file or URL sources listed in `application.yml`
+- Reads OpenAPI 3.x and Swagger 2.0 specs from a directory or explicit URL/file sources
 - Generates one namespaced MCP tool per operation: `{specName}__{operationId}` (e.g. `petstore__getPetById`)
 - **Executes the HTTP call** when the agent invokes a tool and returns the response body, status, and headers (along with the request descriptor for auditability)
 - Refuses to execute destructive operations (`DELETE` / `PUT` / `PATCH`) unless the agent passes `confirm: true`, and prefixes their description with a `⚠️ DESTRUCTIVE` warning
 - Serves tools over **HTTP Streamable MCP transport** (MCP spec 2025-03-26) at `POST /mcp`
 - Exposes `int64` parameters as JSON strings to avoid silent precision loss on values above 2^53
+- Web UI + management REST API for adding, removing, and reloading specs at runtime
 
 ### Not built yet
 
-- Web UI / management REST API for adding, removing, or reloading specs at runtime (Phase 6 — see `PLAN.md`)
 - AsyncAPI support, per-source auth header forwarding, method filtering (Phase 9)
 
 ---
@@ -35,33 +35,52 @@ inventory URL  ──▶           ──▶  petstore__addPet
 
 ### Option A — Docker (no Java toolchain needed)
 
+Pull the image:
+
 ```bash
 docker pull ghcr.io/etrandafir93/mcpswag:latest
-docker run --rm -p 8080:8080 ghcr.io/etrandafir93/mcpswag:latest
 ```
 
-The image ships with a bundled Swagger Petstore spec so you can see ~19 MCP tools on first run. To load your own specs, write a YAML file with a `swagger-mcp.sources` array and point the `MCPSWAG_CONFIG` env var at it — the file is layered on top of the bundled defaults (and, if it sets `swagger-mcp.sources`, replaces them):
+**Load a single spec** — copy your OpenAPI file into `/app/specs/` and it is picked up automatically at startup. The filename stem becomes the spec name:
+
+```bash
+# my-api.yml → tools named my-api__<operationId>
+docker run --rm -p 8080:8080 \
+  -v $PWD/my-api.yml:/app/specs/my-api.yml \
+  ghcr.io/etrandafir93/mcpswag:latest
+```
+
+**Load multiple specs** — mount a directory:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v $PWD/specs:/app/specs \
+  ghcr.io/etrandafir93/mcpswag:latest
+```
+
+McpSwag scans `/app/specs/` for any `.yml`, `.yaml`, or `.json` file and loads them all. No config file needed.
+
+**Load specs from URLs or override settings** — mount a config file at `/app/config/application.yml` (Spring picks it up automatically):
 
 ```yaml
-# my-mcpswag.yml
+# application.yml
 swagger-mcp:
   sources:
     - name: petstore
       url: https://petstore3.swagger.io/api/v3/openapi.json
     - name: orders
-      file: /etc/specs/orders.yml
-    - name: inventory
-      file: classpath:openapi/inventory.yml
+      url: https://internal.example.com/v3/api-docs
+  http:
+    timeout-seconds: 60
 ```
 
 ```bash
 docker run --rm -p 8080:8080 \
-  -v $PWD/my-mcpswag.yml:/etc/mcpswag/config.yml \
-  -e MCPSWAG_CONFIG=/etc/mcpswag/config.yml \
+  -v $PWD/application.yml:/app/config/application.yml \
   ghcr.io/etrandafir93/mcpswag:latest
 ```
 
-The same env var works locally too: `MCPSWAG_CONFIG=./my-mcpswag.yml sbt run`.
+You can combine both: mount spec files into `/app/specs/` **and** a config file for URL sources — they all merge at startup.
 
 Published images live at <https://github.com/etrandafir93/McpSwag/pkgs/container/mcpswag>.
 
@@ -75,7 +94,7 @@ cd McpSwag
 sbt run
 ```
 
-MCP endpoint: `http://localhost:8080/mcp`.
+Drop spec files into `./specs/` before starting (or at any time — the directory is scanned once at startup). MCP endpoint: `http://localhost:8080/mcp`.
 
 ### Connect your agent
 
@@ -102,33 +121,33 @@ Claude Desktop or another MCP client:
 
 ## Configuration
 
-Specs are listed under `swagger-mcp.sources` in `application.yml`. Each source has a `name` and either a `url` or a `file`. URLs are fetched once at startup; if the document has no `servers[]` block, McpSwag derives the base URL from the spec URL's origin.
+No config file is required for simple setups. McpSwag looks for spec files in `./specs/` (Docker: `/app/specs/`) at startup and loads everything it finds there.
+
+When you do need a config file, mount it at `/app/config/application.yml` (Docker) or place it at `./config/application.yml` (local). All fields are optional:
 
 ```yaml
 swagger-mcp:
+  # Explicit sources — use for URL-based specs or files outside the scan directory
   sources:
     - name: petstore
-      file: classpath:openapi/petstore.yml
-
+      url: https://petstore3.swagger.io/api/v3/openapi.json
+    - name: orders
+      url: https://internal.example.com/v3/api-docs
     - name: inventory
-      url: https://inventory.internal/v3/api-docs
+      file: /absolute/path/to/inventory.yml
 
-    - name: github
-      url: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.yaml
-```
+  # Directory to scan for spec files (default: ./specs)
+  scan-dir: ./specs
 
-End-to-end coverage of the URL path lives in `UrlSpecLoadingTest` — a WireMock-backed test that serves a small OpenAPI document, loads it via `SpecSource.Url`, and verifies the generated tools actually call the right upstream endpoints.
-
-HTTP-execution settings:
-
-```yaml
-swagger-mcp:
+  # HTTP execution settings
   http:
-    timeoutSeconds: 30      # per request
-    maxBodyBytes: 262144    # response bodies larger than this are truncated
+    timeout-seconds: 30     # per upstream request (default: 30)
+    max-body-bytes: 262144  # response bodies larger than this are truncated (default: 256 KB)
 ```
 
-Runtime mutation (adding / removing specs without a restart) is planned for Phase 6 but not built yet — changes to `application.yml` currently require a process restart.
+Sources from `sources` and files found in `scan-dir` are all merged — you can use both at once. Specs from URLs are fetched once at startup; if the document has no `servers[]` block, McpSwag derives the base URL from the spec URL's origin.
+
+Specs can also be added, removed, or reloaded at runtime via the web UI at `http://localhost:8080` or the REST API at `/api/specs`.
 
 ---
 
@@ -230,7 +249,7 @@ Authoritative source is [`PLAN.md`](PLAN.md). Snapshot:
 - [x] **Phase 3** — Dynamic MCP tool generation from parsed specs
 - [x] **Phase 4** — Tools execute HTTP requests; `ToolResponse` with destructive-op confirm gate
 - [x] **Phase 5** — CI: `sbt test` on every push / PR with JUnit report
-- [ ] **Phase 6** — Web UI + management REST API (add / remove / reload at runtime) ← next
-- [ ] **Phase 7** — Edge cases & hardening (operationId synthesis, base-URL fallback, deep `$ref`)
+- [x] **Phase 6** — Web UI + management REST API (add / remove / reload at runtime)
+- [ ] **Phase 7** — Edge cases & hardening (operationId synthesis, base-URL fallback, deep `$ref`) ← next
 - [x] **Phase 8** — Docker image + GHCR publishing (manual workflow trigger)
 - [ ] **Phase 9** — Future: AsyncAPI, per-source auth, method filtering

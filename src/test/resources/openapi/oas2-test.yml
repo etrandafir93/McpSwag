@@ -1,0 +1,18 @@
+swagger: "2.0"
+info:
+  title: "OAS 2 API"
+  version: "1.0.0"
+host: api.example.com
+basePath: /v1
+schemes:
+  - https
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: ok

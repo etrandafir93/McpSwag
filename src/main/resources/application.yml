@@ -1,11 +1,6 @@
 spring:
   application:
     name: mcpswag
-  config:
-    # Optional external config file. If MCPSWAG_CONFIG is set, that YAML file
-    # is layered on top of these defaults (overriding swagger-mcp.sources etc).
-    # If unset, the import is a no-op.
-    import: "optional:file:${MCPSWAG_CONFIG:}"
   ai:
     mcp:
       server:
@@ -13,7 +8,6 @@ spring:
         version: 0.1.0
         protocol: STREAMABLE
         type: SYNC
-        instructions: "McpSwag — OpenAPI → MCP gateway. Phase 0: only the hello tool is exposed."
 
 server:
   port: 8080
@@ -22,9 +16,10 @@ swagger-mcp:
   http:
     timeout-seconds: 30
     max-body-bytes: 262144
-  sources:
-    - name: petstore
-      file: classpath:openapi/petstore.yml
+  # scan-dir: ./specs   ← default; drop .yml/.yaml/.json files there and they load automatically
+  # sources:            ← optional explicit list (URLs or absolute file paths)
+  #   - name: petstore
+  #     url: https://petstore3.swagger.io/api/v3/openapi.json
 
 logging:
   level:
