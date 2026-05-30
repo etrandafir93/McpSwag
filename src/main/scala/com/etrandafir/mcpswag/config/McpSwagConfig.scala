@@ -22,6 +22,7 @@ class McpSwagConfig:
     (fromConfig ++ fromScan).asJava
 
   private def scanDir(dir: String): List[SpecSource] =
+    if dir == null then return Nil
     val path = Paths.get(dir)
     if !Files.isDirectory(path) then Nil
     else
