@@ -508,7 +508,7 @@ jobs:
 
 ---
 
-## Phase 6 — Web UI & management API
+## Phase 6 — Web UI & management API ✅ (done)
 
 **Goal:** a working browser UI to add/remove/reload specs, and a REST API backing it.
 

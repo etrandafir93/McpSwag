@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>McpSwag</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ── Top bar ─────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      height: 52px;
+      background: #161b27;
+      border-bottom: 1px solid #1e2736;
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #f8fafc;
+    }
+    .logo span { color: #6366f1; }
+
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e88;
+    }
+    .status-dot.offline { background: #ef4444; box-shadow: 0 0 6px #ef444488; }
+    .endpoint {
+      font-family: monospace;
+      font-size: 12px;
+      background: #1e2736;
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: #7dd3fc;
+    }
+
+    /* ── Stats row ───────────────────────────────────────────────── */
+    .stats {
+      display: flex;
+      gap: 12px;
+      padding: 16px 24px;
+    }
+    .stat-card {
+      flex: 1;
+      background: #161b27;
+      border: 1px solid #1e2736;
+      border-radius: 8px;
+      padding: 14px 18px;
+    }
+    .stat-label { font-size: 12px; color: #64748b; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #f8fafc; }
+    .stat-card.error .stat-value { color: #f87171; }
+
+    /* ── Main two-column area ────────────────────────────────────── */
+    .main {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 16px;
+      padding: 0 24px 16px;
+    }
+
+    .panel {
+      background: #161b27;
+      border: 1px solid #1e2736;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid #1e2736;
+      font-weight: 600;
+      font-size: 13px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-body { padding: 18px; }
+
+    /* ── Add spec panel ──────────────────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed #2d3748;
+      border-radius: 8px;
+      padding: 28px;
+      text-align: center;
+      color: #475569;
+      font-size: 13px;
+      cursor: pointer;
+      margin-bottom: 18px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .drop-zone:hover { border-color: #6366f1; color: #a5b4fc; }
+    .drop-zone-icon { font-size: 28px; margin-bottom: 8px; }
+
+    label { display: block; font-size: 12px; color: #64748b; margin-bottom: 6px; margin-top: 14px; }
+    label:first-of-type { margin-top: 0; }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+    input[type="text"] {
+      flex: 1;
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #e2e8f0;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: #6366f1; }
+    input[type="text"]::placeholder { color: #334155; }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn-ghost { background: transparent; color: #64748b; border: 1px solid #2d3748; }
+    .btn-ghost:hover { color: #e2e8f0; border-color: #475569; opacity: 1; }
+    .btn-danger { background: transparent; color: #f87171; border: 1px solid #3f1f1f; }
+    .btn-danger:hover { background: #3f1f1f; opacity: 1; }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #334155;
+      font-size: 12px;
+      margin: 16px 0;
+    }
+    .divider::before, .divider::after {
+      content: ""; flex: 1; height: 1px; background: #1e2736;
+    }
+
+    .yml-hint {
+      background: #0f1117;
+      border: 1px solid #1e2736;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.6;
+    }
+    .yml-hint .key { color: #7dd3fc; }
+    .yml-hint .val { color: #86efac; }
+    .yml-hint .comment { color: #334155; }
+
+    /* ── Registered specs panel ──────────────────────────────────── */
+    .spec-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .spec-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: #0f1117;
+      border: 1px solid #1e2736;
+      border-radius: 6px;
+    }
+    .spec-icon { font-size: 18px; flex-shrink: 0; }
+    .spec-info { flex: 1; min-width: 0; }
+    .spec-name { font-weight: 600; color: #f1f5f9; font-size: 13px; }
+    .spec-meta { font-size: 11px; color: #475569; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .spec-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge-loaded { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
+    .badge-loading { background: #1c1917; color: #fbbf24; border: 1px solid #292524; }
+    .badge-failed  { background: #2d0a0a; color: #f87171; border: 1px solid #450a0a; }
+    .spec-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* ── Tools table ─────────────────────────────────────────────── */
+    .tools-section {
+      padding: 0 24px 24px;
+    }
+    .tools-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .tools-title { font-weight: 600; font-size: 14px; color: #cbd5e1; }
+    .filter-input {
+      background: #161b27;
+      border: 1px solid #1e2736;
+      border-radius: 6px;
+      padding: 6px 12px;
+      color: #e2e8f0;
+      font-size: 13px;
+      outline: none;
+      width: 240px;
+      transition: border-color 0.2s;
+    }
+    .filter-input:focus { border-color: #6366f1; }
+    .filter-input::placeholder { color: #334155; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #161b27;
+      border: 1px solid #1e2736;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    thead th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: #111827;
+      border-bottom: 1px solid #1e2736;
+    }
+    tbody tr {
+      border-bottom: 1px solid #1a2130;
+      transition: background 0.1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #1a2130; }
+    td { padding: 10px 14px; vertical-align: middle; }
+
+    .tool-name { font-family: monospace; font-size: 12px; color: #c4b5fd; }
+    .tool-spec  { font-size: 12px; color: #475569; }
+    .tool-path  { font-family: monospace; font-size: 12px; color: #94a3b8; }
+    .tool-summary { color: #64748b; font-size: 12px; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .param-count { color: #94a3b8; font-size: 12px; }
+
+    .method-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      font-family: monospace;
+    }
+    .m-get    { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
+    .m-post   { background: #0c1a3a; color: #60a5fa; border: 1px solid #1e3a6e; }
+    .m-put    { background: #2d1f00; color: #fbbf24; border: 1px solid #4d3800; }
+    .m-patch  { background: #2d1f00; color: #fb923c; border: 1px solid #4d2800; }
+    .m-delete { background: #2d0a0a; color: #f87171; border: 1px solid #450a0a; }
+
+    .destructive-row td:first-child { border-left: 2px solid #ef4444; }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px;
+      color: #334155;
+    }
+    .empty-state-icon { font-size: 36px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Top bar ──────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">Mcp<span>Swag</span></div>
+  <div class="server-status">
+    <div class="status-dot"></div>
+    <span>MCP server running</span>
+    <span class="endpoint">http://localhost:8080/mcp</span>
+  </div>
+</header>
+
+<!-- ── Stats row ────────────────────────────────────────────────── -->
+<div class="stats">
+  <div class="stat-card">
+    <div class="stat-label">Specs loaded</div>
+    <div class="stat-value">2</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">MCP tools</div>
+    <div class="stat-value">23</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total endpoints</div>
+    <div class="stat-value">23</div>
+  </div>
+  <div class="stat-card error">
+    <div class="stat-label">Errors</div>
+    <div class="stat-value">1</div>
+  </div>
+</div>
+
+<!-- ── Main two-column ───────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- Left: Add spec -->
+  <div class="panel">
+    <div class="panel-header">Add spec source</div>
+    <div class="panel-body">
+
+      <div class="drop-zone">
+        <div class="drop-zone-icon">📂</div>
+        Drop an OpenAPI / Swagger file here<br>or click to browse
+      </div>
+
+      <div class="divider">or add by URL</div>
+
+      <label>Spec name</label>
+      <input type="text" placeholder="e.g. petstore" style="margin-bottom: 10px;" />
+
+      <label>URL</label>
+      <div class="input-row">
+        <input type="text" placeholder="https://example.com/openapi.json" />
+        <button class="btn btn-primary">Add</button>
+      </div>
+
+      <div class="divider">or configure in application.yml</div>
+
+      <div class="yml-hint">
+        <span class="key">swagger-mcp</span>:<br>
+        &nbsp;&nbsp;<span class="key">sources</span>:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;- <span class="key">name</span>: <span class="val">petstore</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">url</span>: <span class="val">https://petstore.swagger.io/v2/swagger.json</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;- <span class="key">name</span>: <span class="val">internal-api</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">file</span>: <span class="val">./specs/internal.yaml</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Registered specs -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>Registered specs</span>
+      <span style="color: #475569; font-size: 12px; font-weight: 400;">3 specs</span>
+    </div>
+    <div class="panel-body">
+      <div class="spec-list">
+
+        <div class="spec-item">
+          <div class="spec-icon">🟢</div>
+          <div class="spec-info">
+            <div class="spec-name">petstore</div>
+            <div class="spec-meta">https://petstore.swagger.io/v2/swagger.json</div>
+          </div>
+          <span class="spec-badge badge-loaded">19 tools</span>
+          <div class="spec-actions">
+            <button class="btn btn-sm btn-ghost">↺ Reload</button>
+            <button class="btn btn-sm btn-danger">✕</button>
+          </div>
+        </div>
+
+        <div class="spec-item">
+          <div class="spec-icon">🟢</div>
+          <div class="spec-info">
+            <div class="spec-name">github</div>
+            <div class="spec-meta">https://github.com/github/rest-api-description/...</div>
+          </div>
+          <span class="spec-badge badge-loaded">4 tools</span>
+          <div class="spec-actions">
+            <button class="btn btn-sm btn-ghost">↺ Reload</button>
+            <button class="btn btn-sm btn-danger">✕</button>
+          </div>
+        </div>
+
+        <div class="spec-item">
+          <div class="spec-icon">🔴</div>
+          <div class="spec-info">
+            <div class="spec-name">broken-api</div>
+            <div class="spec-meta" style="color: #f87171;">Unable to resolve $ref: #/components/schemas/Missing</div>
+          </div>
+          <span class="spec-badge badge-failed">failed</span>
+          <div class="spec-actions">
+            <button class="btn btn-sm btn-ghost">↺ Retry</button>
+            <button class="btn btn-sm btn-danger">✕</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Tools table ───────────────────────────────────────────────── -->
+<div class="tools-section">
+  <div class="tools-header">
+    <span class="tools-title">MCP Tools <span style="color:#334155;font-weight:400;">— 23 total</span></span>
+    <input class="filter-input" type="text" placeholder="Filter by name, path, or spec…" />
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Tool name</th>
+        <th>Method</th>
+        <th>Path</th>
+        <th>Spec</th>
+        <th>Params</th>
+        <th>Summary</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="tool-name">petstore__getPetById</td>
+        <td><span class="method-badge m-get">GET</span></td>
+        <td class="tool-path">/pet/{petId}</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">Find pet by ID</td>
+      </tr>
+      <tr>
+        <td class="tool-name">petstore__addPet</td>
+        <td><span class="method-badge m-post">POST</span></td>
+        <td class="tool-path">/pet</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">Add a new pet to the store</td>
+      </tr>
+      <tr>
+        <td class="tool-name">petstore__updatePet</td>
+        <td><span class="method-badge m-put">PUT</span></td>
+        <td class="tool-path">/pet</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">Update an existing pet</td>
+      </tr>
+      <tr class="destructive-row">
+        <td class="tool-name">petstore__deletePet</td>
+        <td><span class="method-badge m-delete">DELETE</span></td>
+        <td class="tool-path">/pet/{petId}</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">2</td>
+        <td class="tool-summary">⚠️ Deletes a pet</td>
+      </tr>
+      <tr>
+        <td class="tool-name">petstore__findPetsByStatus</td>
+        <td><span class="method-badge m-get">GET</span></td>
+        <td class="tool-path">/pet/findByStatus</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">Finds pets by status</td>
+      </tr>
+      <tr>
+        <td class="tool-name">petstore__findPetsByTags</td>
+        <td><span class="method-badge m-get">GET</span></td>
+        <td class="tool-path">/pet/findByTags</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">Finds pets by tags</td>
+      </tr>
+      <tr>
+        <td class="tool-name">petstore__updatePetWithForm</td>
+        <td><span class="method-badge m-post">POST</span></td>
+        <td class="tool-path">/pet/{petId}</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">3</td>
+        <td class="tool-summary">Updates a pet in the store with form data</td>
+      </tr>
+      <tr class="destructive-row">
+        <td class="tool-name">petstore__deleteOrder</td>
+        <td><span class="method-badge m-delete">DELETE</span></td>
+        <td class="tool-path">/store/order/{orderId}</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">⚠️ Delete purchase order by ID</td>
+      </tr>
+      <tr>
+        <td class="tool-name">petstore__getInventory</td>
+        <td><span class="method-badge m-get">GET</span></td>
+        <td class="tool-path">/store/inventory</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">0</td>
+        <td class="tool-summary">Returns pet inventories by status</td>
+      </tr>
+      <tr>
+        <td class="tool-name">petstore__placeOrder</td>
+        <td><span class="method-badge m-post">POST</span></td>
+        <td class="tool-path">/store/order</td>
+        <td class="tool-spec">petstore</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">Place an order for a pet</td>
+      </tr>
+      <tr>
+        <td class="tool-name">github__listRepos</td>
+        <td><span class="method-badge m-get">GET</span></td>
+        <td class="tool-path">/user/repos</td>
+        <td class="tool-spec">github</td>
+        <td class="param-count">4</td>
+        <td class="tool-summary">List repositories for the authenticated user</td>
+      </tr>
+      <tr>
+        <td class="tool-name">github__createRepo</td>
+        <td><span class="method-badge m-post">POST</span></td>
+        <td class="tool-path">/user/repos</td>
+        <td class="tool-spec">github</td>
+        <td class="param-count">1</td>
+        <td class="tool-summary">Create a new repository</td>
+      </tr>
+      <tr class="destructive-row">
+        <td class="tool-name">github__deleteRepo</td>
+        <td><span class="method-badge m-delete">DELETE</span></td>
+        <td class="tool-path">/repos/{owner}/{repo}</td>
+        <td class="tool-spec">github</td>
+        <td class="param-count">2</td>
+        <td class="tool-summary">⚠️ Delete a repository</td>
+      </tr>
+      <tr>
+        <td class="tool-name">github__getRepo</td>
+        <td><span class="method-badge m-get">GET</span></td>
+        <td class="tool-path">/repos/{owner}/{repo}</td>
+        <td class="tool-spec">github</td>
+        <td class="param-count">2</td>
+        <td class="tool-summary">Get a repository</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>
