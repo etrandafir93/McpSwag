@@ -272,7 +272,7 @@
     <div class="server-status">
       <div class="status-dot"></div>
       <span>running</span>
-      <span class="endpoint">http://localhost:8080/mcp</span>
+      <span class="endpoint js-mcp-url"></span>
     </div>
   </div>
 </header>
@@ -416,7 +416,7 @@
                 <div class="code-block"><button class="copy-btn">copy</button>{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"mcpswag"</span>: {
-      <span class="key">"url"</span>: <span class="str">"http://localhost:8080/mcp"</span>,
+      <span class="key">"url"</span>: <span class="str js-mcp-url-str"></span>,
       <span class="key">"type"</span>: <span class="str">"http"</span>
     }
   }
@@ -431,7 +431,7 @@
               </div>
             </div>
           </div>
-          <div class="note">Make sure McpSwag is running before starting Claude Desktop. Verify the server is up at <code>http://localhost:8080/mcp</code>.</div>
+          <div class="note">Make sure McpSwag is running before starting Claude Desktop. Verify the server is up at <code class="js-mcp-url"></code>.</div>
         </div>
 
         <!-- Claude Code -->
@@ -443,9 +443,7 @@
               <div class="step-num-circle">1</div>
               <div class="step-body">
                 <div class="step-title">Option A — register via CLI (recommended)</div>
-                <div class="code-block"><button class="copy-btn">copy</button>claude mcp add mcpswag \
-  --transport http \
-  --url <span class="str">http://localhost:8080/mcp</span></div>
+                <div class="code-block"><button class="copy-btn">copy</button>claude mcp add --transport http mcpswag <span class="str js-mcp-url"></span></div>
               </div>
             </div>
             <div class="step">
@@ -455,7 +453,7 @@
                 <div class="code-block"><button class="copy-btn">copy</button>{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"mcpswag"</span>: {
-      <span class="key">"url"</span>: <span class="str">"http://localhost:8080/mcp"</span>,
+      <span class="key">"url"</span>: <span class="str js-mcp-url-str"></span>,
       <span class="key">"type"</span>: <span class="str">"http"</span>
     }
   }
@@ -483,7 +481,7 @@
               <div class="step-num-circle">1</div>
               <div class="step-body">
                 <div class="step-title">Endpoint</div>
-                <div class="code-block"><button class="copy-btn">copy</button>POST <span class="url">http://localhost:8080/mcp</span>
+                <div class="code-block"><button class="copy-btn">copy</button>POST <span class="url js-mcp-url"></span>
 Content-Type: application/json
 Accept: application/json, text/event-stream</div>
               </div>
@@ -492,7 +490,7 @@ Accept: application/json, text/event-stream</div>
               <div class="step-num-circle">2</div>
               <div class="step-body">
                 <div class="step-title">List available tools</div>
-                <div class="code-block"><button class="copy-btn">copy</button>curl -X POST <span class="url">http://localhost:8080/mcp</span> \
+                <div class="code-block"><button class="copy-btn">copy</button>curl -X POST <span class="url js-mcp-url"></span> \
   -H <span class="str">"Content-Type: application/json"</span> \
   -H <span class="str">"Accept: application/json"</span> \
   -d <span class="str">'{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</span></div>
@@ -502,7 +500,7 @@ Accept: application/json, text/event-stream</div>
               <div class="step-num-circle">3</div>
               <div class="step-body">
                 <div class="step-title">Call a tool</div>
-                <div class="code-block"><button class="copy-btn">copy</button>curl -X POST <span class="url">http://localhost:8080/mcp</span> \
+                <div class="code-block"><button class="copy-btn">copy</button>curl -X POST <span class="url js-mcp-url"></span> \
   -H <span class="str">"Content-Type: application/json"</span> \
   -d <span class="str">'{"jsonrpc":"2.0","id":2,"method":"tools/call",
      "params":{"name":"petstore__getPetById","arguments":{"petId":1}}}'</span></div>
@@ -549,6 +547,9 @@ Accept: application/json, text/event-stream</div>
   // ── Bootstrap ────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     applyTheme(localStorage.getItem('mcpswag-theme') || 'dark');
+    const mcpUrl = window.location.origin + '/mcp';
+    document.querySelectorAll('.js-mcp-url').forEach(el => el.textContent = mcpUrl);
+    document.querySelectorAll('.js-mcp-url-str').forEach(el => el.textContent = '"' + mcpUrl + '"');
     fetchAndRender();
     setupDropZone();
     document.getElementById('spec-url').addEventListener('keydown', e => {
