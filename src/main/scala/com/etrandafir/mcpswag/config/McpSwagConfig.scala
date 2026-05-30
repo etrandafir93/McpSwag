@@ -17,7 +17,7 @@ class McpSwagConfig:
 
   @Bean
   def specSources(props: McpSwagProperties): java.util.List[SpecSource] =
-    val fromConfig = props.sources.asScala.toList.map(toSpecSource)
+    val fromConfig = Option(props.sources).toList.flatMap(_.asScala).map(toSpecSource)
     val fromScan   = scanDir(props.scanDir)
     (fromConfig ++ fromScan).asJava
 
