@@ -576,56 +576,33 @@ No external JS frameworks. Vanilla JS only. Thymeleaf only used for the initial 
 
 Work through these after Phase 6 is fully functional.
 
-### operationId synthesis
+### operationId synthesis ✅
 
-When `operation.getOperationId` is null:
-```scala
-def synthesizeOperationId(method: String, path: String): String =
-  val segments = path.split("/").filter(_.nonEmpty)
-    .map(s => if s.startsWith("{") then s.drop(1).dropRight(1) else s)
-  (method.toLowerCase +: segments).mkString("__")
-// GET /pet/{petId} → get__pet__petId
-```
+When `operation.getOperationId` is null, `SpecParser.synthesizeOperationId(method, path)` derives a stable id: `GET /pet/{petId}` → `get__pet__petId`. Covered by `SpecParserSpec`.
 
-### baseUrl fallback
+### baseUrl fallback ✅
 
-If `openApi.getServers` is null or empty:
-- For URL sources: derive origin from the source URL (`scheme://host:port`)
-- For file sources: use `http://localhost:8080` as default and log a warning
+`SpecParser.resolveBaseUrl` filters out `"/"` (the OAS 3 default when no servers are declared) and falls back to `fallbackBaseUrl`: URL sources use the spec URL's origin (`scheme://host:port`); file sources log a warning and return `http://localhost:8080`. The `"/"` filter is critical because `OpenAPIV3Parser` populates `servers[0].url = "/"` rather than leaving the list empty. Covered by `UrlSpecLoadingTest` ("spec with no servers[]...").
 
-### $ref resolution in SchemaConverter
+### $ref resolution in SchemaConverter ✅
 
-The swagger-parser resolves `$ref` inline by default when using `OpenAPIV3Parser` with `ParseOptions`. Ensure `ParseOptions` has `resolveFully = true`:
+`SpecParser.doParse` sets `opts.setResolveFully(true)` before calling `readOas3`. The OAS 3 path fully inlines all `$ref`s so `SchemaConverter` never needs to traverse references manually.
 
-```scala
-val opts = new ParseOptions()
-opts.setResolveFully(true)
-new OpenAPIV3Parser().read(location, null, opts)
-```
+### OAS 2 basePath ✅
 
-This avoids needing manual `$ref` traversal in most cases.
+`OpenAPIV3Parser`'s ServiceLoader-based v2 converter is not reliably discovered in all JVM environments (observed on Java 25). `SpecParser` now has an explicit `readSwagger20` fallback that calls `io.swagger.parser.SwaggerParser` + `io.swagger.v3.parser.converter.SwaggerConverter` directly. swagger-parser merges `host + basePath + schemes` into `servers[0].url` during conversion. Covered by `UrlSpecLoadingTest` ("Swagger 2.0 spec...").
 
-### OAS 2 basePath
+### SpecRegistry error state ✅
 
-swagger-parser converts OAS 2 to OAS 3 internally, merging `host + basePath + schemes` into `servers[0].url`. No special handling needed if `resolveFully` is set. Verify with a Swagger 2.0 spec (petstore).
+`SpecParser.parse()` wraps `doParse` in `Try(...).toEither`. `SpecRegistry.load` matches on the result: `Right(ops)` → `SpecStatus.Loaded`, `Left(msg)` → `SpecStatus.Failed(msg)`. Operations list for failed specs is `Nil`. Covered by `SpecRegistrySpec`.
 
-### SpecRegistry error state
+### Tool name collision guard ✅
 
-Wrap `SpecParser.parse()` in a try/catch. Store `SpecStatus.Failed(exception.getMessage)` if parsing fails. The UI should show the red error state with the message. The rebuild is not called on failure — existing tools for that spec name are cleared.
+`DynamicToolRegistry.rebuild` checks `names.diff(names.distinct)` after collecting all operations and emits a `logger.warn` if duplicates exist (should never happen under normal namespacing, but guards against edge cases). Implemented in `DynamicToolRegistry`.
 
-### Tool name collision guard
+### Missing summary and description ✅
 
-After building `currentTools` in `DynamicToolRegistry.rebuild`, check for duplicate names:
-```scala
-val names = operations.map(_.toolName)
-val duplicates = names.diff(names.distinct)
-if duplicates.nonEmpty then
-  logger.warn(s"[McpSwag] Duplicate tool names detected: ${duplicates.mkString(", ")}")
-```
-
-### Missing summary and description
-
-If both `summary` and `description` are null/empty on an operation, fall back to the tool name itself as the description. Never pass an empty string to `ToolDefinition.description` — Spring AI may reject it.
+`OperationTool.buildDescription` falls back through `summary → description → toolName`. Spring AI rejects empty descriptions; `toolName` is always non-empty. Covered by `OperationToolSpec`.
 
 ### External config via MCPSWAG_CONFIG env var ✅
 

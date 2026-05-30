@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component
 
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import scala.jdk.CollectionConverters.*
 import scala.util.Try
 
@@ -31,19 +30,12 @@ class SpecParser(schemaConverter: SchemaConverter):
 
     val opts = new ParseOptions()
     opts.setResolveFully(true)
-    val result = readSpec(location, opts)
 
-    // resolveFully=true breaks Swagger 2.0 → OAS 3 conversion in swagger-parser 2.x;
-    // fall back to resolve-only so OAS 2 specs still load (inline $ref expansion won't
-    // apply but simple OAS 2 specs rarely need it).
-    val openApi = Option(result.getOpenAPI).orElse {
-      val fallback = new ParseOptions()
-      fallback.setResolve(true)
-      Option(readSpec(location, fallback).getOpenAPI)
-    }.getOrElse {
-      val msgs = Option(result.getMessages).map(_.asScala.mkString("; ")).getOrElse("unknown error")
-      sys.error(s"Failed to parse spec '$specName' from $location: $msgs")
-    }
+    val openApi = readOas3(location, opts)
+      .orElse(readSwagger20(location))  // ServiceLoader for v2 converter not picked up in all environments
+      .getOrElse {
+        sys.error(s"Failed to parse spec '$specName' from $location: unable to read as OAS 3 or Swagger 2.0")
+      }
 
     val baseUrl = resolveBaseUrl(openApi, source)
 
@@ -53,24 +45,34 @@ class SpecParser(schemaConverter: SchemaConverter):
       }
     }
 
-  private def readSpec(location: String, opts: ParseOptions): SwaggerParseResult =
-    val parser = new OpenAPIV3Parser()
-    if location.startsWith("classpath:") then
-      val resourcePath = location.stripPrefix("classpath:")
-      val res = new ClassPathResource(resourcePath)
-      if !res.exists() then sys.error(s"Classpath resource not found: $resourcePath")
-      val content = new String(res.getInputStream.readAllBytes(), StandardCharsets.UTF_8)
-      // readContents only handles OAS 3; write to a temp file so readLocation can detect
-      // the version and run the Swagger 2.0 → OAS 3 converter when needed.
-      val suffix = if resourcePath.endsWith(".json") then ".json" else ".yaml"
-      val tmp = Files.createTempFile("mcpswag-", suffix)
-      try
-        Files.writeString(tmp, content)
-        parser.readLocation(tmp.toUri.toString, null, opts)
-      finally
-        Files.deleteIfExists(tmp)
-    else
-      parser.readLocation(location, null, opts)
+  private def readOas3(location: String, opts: ParseOptions): Option[OpenAPI] =
+    val result =
+      if location.startsWith("classpath:") then
+        val resourcePath = location.stripPrefix("classpath:")
+        val res = new ClassPathResource(resourcePath)
+        if !res.exists() then sys.error(s"Classpath resource not found: $resourcePath")
+        val content = new String(res.getInputStream.readAllBytes(), StandardCharsets.UTF_8)
+        new OpenAPIV3Parser().readContents(content, null, opts)
+      else
+        new OpenAPIV3Parser().readLocation(location, null, opts)
+    Option(result.getOpenAPI)
+
+  // OpenAPIV3Parser's ServiceLoader-based v2 converter isn't picked up in all JVM environments;
+  // call SwaggerParser + SwaggerConverter directly as a reliable OAS 2 fallback.
+  private def readSwagger20(location: String): Option[OpenAPI] =
+    val swaggerParser = new io.swagger.parser.SwaggerParser()
+    val oas2Result =
+      if location.startsWith("classpath:") then
+        val resourcePath = location.stripPrefix("classpath:")
+        val res = new ClassPathResource(resourcePath)
+        if !res.exists() then return None
+        val content = new String(res.getInputStream.readAllBytes(), StandardCharsets.UTF_8)
+        swaggerParser.readWithInfo(content, true)
+      else
+        swaggerParser.readWithInfo(location, new java.util.ArrayList(), true)
+    Option(oas2Result.getSwagger)
+      .map(s => new io.swagger.v3.parser.converter.SwaggerConverter().convert(oas2Result))
+      .flatMap(r => Option(r.getOpenAPI))
 
   private def toOperationDef(
     specName: String,
