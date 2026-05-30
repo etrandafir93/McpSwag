@@ -524,14 +524,17 @@ Accept: application/json, text/event-stream</div>
 <div class="page" id="page-logs">
   <div class="section" style="padding-bottom:32px;">
     <div class="logs-toolbar">
-      <select><option>All levels</option><option>INFO</option><option>WARN</option><option>ERROR</option><option>DEBUG</option></select>
-      <select><option>All components</option><option>SpecRegistry</option><option>SpecParser</option><option>OperationTool</option><option>HttpExecutor</option></select>
-      <input class="log-search" type="text" placeholder="Search logs…" />
-      <label class="log-follow"><input type="checkbox" checked /> Follow tail</label>
+      <select id="log-level-filter" onchange="renderLogsFromState()">
+        <option value="all">All levels</option>
+        <option value="INFO">INFO</option>
+        <option value="WARN">WARN</option>
+        <option value="ERROR">ERROR</option>
+        <option value="DEBUG">DEBUG</option>
+      </select>
+      <input class="log-search" id="log-search-input" type="text" placeholder="Search logs…" oninput="renderLogsFromState()" />
+      <label class="log-follow"><input type="checkbox" id="log-follow" checked /> Follow tail</label>
     </div>
-    <div class="log-terminal" id="log-terminal">
-      <div class="log-line"><span class="log-ts">—</span><span class="log-level info">INFO</span><span class="log-msg">Log streaming not yet implemented — coming soon<span class="log-cursor"></span></span></div>
-    </div>
+    <div class="log-terminal" id="log-terminal"></div>
   </div>
 </div>
 
@@ -540,6 +543,8 @@ Accept: application/json, text/event-stream</div>
   // ── State ────────────────────────────────────────────────────────
   let currentSpecs = [];
   let currentTools = [];
+  let logLines     = [];
+  let logEventSource = null;
 
   // ── Bootstrap ────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
@@ -701,12 +706,68 @@ Accept: application/json, text/event-stream</div>
     fetchAndRender();
   }
 
+  // ── Logs ─────────────────────────────────────────────────────────
+  function connectLogs() {
+    if (logEventSource) return;
+    logEventSource = new EventSource('/api/logs');
+    logEventSource.onmessage = e => {
+      const entry = JSON.parse(e.data);
+      logLines.push(entry);
+      if (passesLogFilter(entry)) {
+        const terminal = document.getElementById('log-terminal');
+        terminal.appendChild(buildLogLine(entry));
+        if (document.getElementById('log-follow').checked)
+          terminal.scrollTop = terminal.scrollHeight;
+      }
+    };
+    logEventSource.onerror = () => {
+      logEventSource.close();
+      logEventSource = null;
+      setTimeout(connectLogs, 3000);
+    };
+  }
+
+  function formatTs(ms) {
+    const d = new Date(ms);
+    return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  }
+
+  function buildLogLine(entry) {
+    const div = document.createElement('div');
+    div.className = 'log-line';
+    const levelClass = (entry.level || '').toLowerCase();
+    div.innerHTML =
+      `<span class="log-ts">${formatTs(entry.ts)}</span>` +
+      `<span class="log-level ${levelClass}">${esc(entry.level)}</span>` +
+      `<span class="log-ts" style="min-width:120px;flex-shrink:0;">${esc(entry.logger)}</span>` +
+      `<span class="log-msg">${esc(entry.message)}</span>`;
+    return div;
+  }
+
+  function passesLogFilter(entry) {
+    const level  = document.getElementById('log-level-filter').value;
+    const search = document.getElementById('log-search-input').value.toLowerCase();
+    if (level !== 'all' && entry.level !== level) return false;
+    if (search && !entry.message.toLowerCase().includes(search) &&
+        !entry.logger.toLowerCase().includes(search)) return false;
+    return true;
+  }
+
+  function renderLogsFromState() {
+    const terminal = document.getElementById('log-terminal');
+    terminal.innerHTML = '';
+    logLines.filter(passesLogFilter).forEach(e => terminal.appendChild(buildLogLine(e)));
+    if (document.getElementById('log-follow').checked)
+      terminal.scrollTop = terminal.scrollHeight;
+  }
+
   // ── Navigation ───────────────────────────────────────────────────
   function showPage(name, el) {
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('page-' + name).classList.add('active');
+    if (name === 'logs') connectLogs();
   }
 
   function showClient(name, el) {

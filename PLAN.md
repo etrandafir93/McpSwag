@@ -821,6 +821,19 @@ docker run -v ./my-specs:/app/specs ghcr.io/etrandafir93/mcpswag:latest
 
 ---
 
+## Phase 8c — Log streaming ✅ (done)
+
+**Goal:** stream live application logs to the browser Logs tab via SSE.
+
+**What was built:**
+- `LogBuffer.scala` — Scala `object` (JVM singleton); holds a `ConcurrentLinkedDeque[LogEntry]` ring buffer (max 500) and a `CopyOnWriteArrayList[SseEmitter]` for live clients. `append()` fans out to all registered emitters; `register()` sets up completion/timeout/error cleanup callbacks.
+- `LogAppender.scala` — Logback `AppenderBase[ILoggingEvent]`; converts each event to a `LogEntry` and calls `LogBuffer.append`. Intentionally not a Spring bean (Logback initialises it before Spring starts).
+- `LogsController.scala` — `GET /api/logs` SSE endpoint; replays `LogBuffer.recent` to the new client then registers the emitter.
+- `logback-spring.xml` — wires `LogAppender` into the `root` appender list; sets `com.etrandafir.mcpswag` to DEBUG.
+- `index.html` Logs tab — real-time terminal: `connectLogs()` opens `EventSource('/api/logs')`, appends DOM nodes on each message, auto-reconnects after 3 s on error; level filter + text search rebuild from `logLines[]` state; follow-tail auto-scroll checkbox.
+
+---
+
 ## Phase 9 — Future (not in scope now)
 
 These are documented here for awareness. Do not implement in the current iteration.
