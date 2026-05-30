@@ -789,6 +789,38 @@ jobs:
 
 ---
 
+## Phase 8b — Docker UX: zero-config mounts ✅ (done)
+
+**Goal:** eliminate env-var ceremony for the two most common Docker customisations.
+
+### Config file auto-discovery
+
+Spring Boot searches `file:./config/` before `classpath:/` by default. Because the container's `WORKDIR` is `/app`, mounting a YAML at `/app/config/application.yml` is picked up automatically — no env var or extra flag needed.
+
+```
+docker run -v ./my-config.yml:/app/config/application.yml ghcr.io/etrandafir93/mcpswag:latest
+```
+
+The `/app/config/` directory is pre-created in the image (empty) so it is a clean, documented mount point.
+
+### Spec directory auto-scan
+
+`swagger-mcp.scan-dir` (default `./specs`) is scanned at startup. Any `.yaml`, `.yml`, or `.json` file found there is loaded as a `SpecSource.File` with the filename stem as the spec name. In the container this resolves to `/app/specs/`.
+
+```
+docker run -v ./my-specs:/app/specs ghcr.io/etrandafir93/mcpswag:latest
+```
+
+`/app/specs/` is pre-created in the image (empty). If the directory is absent or empty, startup proceeds normally — no error.
+
+### Files changed
+
+- `McpSwagProperties.scala` — add `scanDir: String = "./specs"`
+- `McpSwagConfig.scala` — scan the dir and append found files to the sources list
+- `Dockerfile` — `RUN mkdir /app/config /app/specs`
+
+---
+
 ## Phase 9 — Future (not in scope now)
 
 These are documented here for awareness. Do not implement in the current iteration.

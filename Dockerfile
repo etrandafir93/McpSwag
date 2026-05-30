@@ -8,5 +8,8 @@
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 COPY . /app/
+# Pre-create mount-point directories so users can bind-mount without creating
+# them manually. Spring Boot picks up /app/config/application.yml automatically.
+RUN mkdir -p /app/config /app/specs
 EXPOSE 8080
 ENTRYPOINT ["/app/bin/mcpswag"]

@@ -1,9 +1,11 @@
 package com.etrandafir.mcpswag.config
 
 import com.etrandafir.mcpswag.spec.SpecSource
+import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.{Bean, Configuration}
 
+import java.nio.file.{Files, Paths}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -11,9 +13,27 @@ import scala.jdk.OptionConverters.*
 @EnableConfigurationProperties(Array(classOf[McpSwagProperties]))
 class McpSwagConfig:
 
+  private val logger = LoggerFactory.getLogger(classOf[McpSwagConfig])
+
   @Bean
   def specSources(props: McpSwagProperties): java.util.List[SpecSource] =
-    props.sources.asScala.toList.map(toSpecSource).asJava
+    val fromConfig = props.sources.asScala.toList.map(toSpecSource)
+    val fromScan   = scanDir(props.scanDir)
+    (fromConfig ++ fromScan).asJava
+
+  private def scanDir(dir: String): List[SpecSource] =
+    val path = Paths.get(dir)
+    if !Files.isDirectory(path) then Nil
+    else
+      val found = Files.list(path).iterator().asScala.toList
+        .filter(p => p.toString.matches(".*\\.(ya?ml|json)$"))
+        .sortBy(_.getFileName.toString)
+        .map: p =>
+          val name = p.getFileName.toString.replaceAll("\\.(ya?ml|json)$", "")
+          SpecSource.File(name, p.toAbsolutePath.toString)
+      if found.nonEmpty then
+        logger.info(s"[McpSwag] Scanned '$dir' — found ${found.size} spec file(s): ${found.map(_.name).mkString(", ")}")
+      found
 
   private def toSpecSource(cfg: SourceConfig): SpecSource =
     val url  = Option(cfg.url).flatMap(_.toScala)

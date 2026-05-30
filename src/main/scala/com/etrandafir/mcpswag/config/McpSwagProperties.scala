@@ -7,7 +7,8 @@ import java.util as ju
 @ConfigurationProperties("swagger-mcp")
 case class McpSwagProperties(
   sources: ju.List[SourceConfig] = ju.List.of(),
-  http:    HttpConfig            = HttpConfig()
+  http:    HttpConfig            = HttpConfig(),
+  scanDir: String                = "./specs"
 )
 
 case class SourceConfig(
